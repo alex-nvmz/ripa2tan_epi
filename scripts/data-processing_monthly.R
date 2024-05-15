@@ -11,7 +11,7 @@ library(readxl)
 library(modelr)
 
 
-base_path <- "."
+base_path <- ".."
 data_path <- file.path(base_path, "data")
 
 
@@ -403,92 +403,4 @@ saveRDS(
   disease_df,
   file.path(data_path, "processed", "disease-cases_moshi-siha_monthly_2014-2022.Rds")
 )
-
-# --
-
-
-
-
-
-
-
-
-
-
-
-
-
-# moshi2 <- moshi |> 
-#   mutate(
-#     disease_group_modified = case_when(
-#       .default = disease_group,
-#       # disease_group == "Both" ~ disease,
-#       # disease_group == "Other Cd" ~ disease,
-#       disease_group == "Other Ncd" ~ disease,
-#     )
-#   )
-# 
-# moshi |> 
-#   arrange(disease_group) |> 
-#   print(n=50)
-# 
-# 
-# moshi$disease_group |> table()
-# moshi2$disease_group_modified |> table()
-# 
-# (moshi2$disease_group_modified |> table())[newdis]
-# 
-# newdis <- setdiff(
-#   moshi2$disease_group_modified |> table() |> names(),
-#   moshi$disease_group |> table() |> names()
-#   
-# )
-# 
-# moshi$disease |> table() |> sort()
-# 
-# 
-# moshi |> 
-#   filter(disease == "Relapsing Fever (Louse Borne Typhus)")
-# 
-# moshi$disease_group_comment |> table()
-# 
-# moshi$disease_communicable |> table()
-# 
-# disease_order <- moshi |> 
-#   group_by(disease) |> 
-#   summarise(n = n()) |> 
-#   arrange(n) |> 
-#   pull(disease)
-# 
-# moshi |> 
-#   mutate(disease = factor(disease, levels=rev(disease_order))) |> 
-#   ggplot() +
-#   geom_tile(
-#     aes(x=time, y=disease, fill=is.na(n_cases)),
-#     color="black",
-#     width=31
-#   ) +
-#   scale_fill_manual(
-#     values = c("steelblue3", "gray20")
-#   )
-# 
-# disease_order <- moshi |> 
-#   group_by(disease_group) |> 
-#   summarise(n = n()) |> 
-#   arrange(n) |> 
-#   pull(disease_group)
-# 
-# moshi |> 
-#   mutate(disease_group = factor(disease_group, levels=rev(disease_order))) |> 
-#   ggplot() +
-#   geom_tile(
-#     aes(x=time, y=disease_group, fill=n_cases),
-#     color="black",
-#     width=31
-#   ) +
-#   scale_fill_viridis_c()
-
-
-
-
 

@@ -16,15 +16,9 @@ venv/
 !/data/processed/.gitkeep
 
 # Output
-/results/R-data/*
-!/results/R-data/.gitkeep
-/results/analysis/*
-!/results/analysis/.gitkeep
 /results/plots/*
 !/results/plots/.gitkeep
 /results/tables/*
 !/results/tables/.gitkeep
 
 # Others
-/scripts/data-processing/other-scripts/
-/scripts/analysis/other-scripts/
