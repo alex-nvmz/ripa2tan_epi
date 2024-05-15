@@ -2,8 +2,6 @@
 
 This repository contains the code for the environmental epidemiology analyses of RIPA2TAN.
 
-The data is not included in the repository, but you can see which files were used in the project structure below.
-
 ## Project structure
 
 ```
