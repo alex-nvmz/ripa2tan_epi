@@ -77,6 +77,35 @@ pm2p5 <- read_csv(
   col_select = -1
 )
 
+# New PM2.5 data for Siha (without considering National Park area)
+pm2p5_siha <- read_csv(
+  file.path(data_path, "raw", "avg_pm25_monthly_siha_np.csv"),
+  col_select = -1
+)
+
+# Substitute Siha observations in main pm2p5 dataframe
+# New PM2.5 data for Siha (without considering National Park area)
+pm2p5_siha <- pm2p5_siha |> 
+  mutate(
+    District = case_when(
+      .default = District,
+      District == "Siha_without_nationalpark" ~ "Siha"
+    )
+  )
+
+pm2p5 <- pm2p5 |> 
+  left_join(pm2p5_siha, by=c("District", "year", "month")) |> 
+  mutate(
+    avg_pm2.5_monthly = if_else(
+      District == "Siha",
+      avg_pm2.5_sihanp_monthly,
+      avg_pm2.5_monthly
+    )
+  ) |> 
+  select(- avg_pm2.5_sihanp_monthly)
+
+
+# Regular formatting
 pm2p5 <- pm2p5 |> 
   mutate(
     time = ym(paste0(year, month))
@@ -89,6 +118,7 @@ pm2p5 <- pm2p5 |>
   relocate(time)
 
 pm2p5 |> head()
+
 
 # ---
 
@@ -245,6 +275,28 @@ saveRDS(
   environ_df,
   file.path(data_path, "processed", "environmental-variables_moshi-siha_monthly_2014-2022.Rds")
   )
+
+# Additional air quality variables (2018-) -----------------------------------------------
+
+# NO2
+
+no2 <- read_csv(
+  file.path(data_path, "raw", "no2_monthly_2018_2021.csv"),
+  col_select = -1
+)
+
+no2 |> 
+  head(20)
+
+# There's many observations per month and I don't understand
+
+# O3
+
+# SO2
+
+# AOD
+
+
 
 # Diagnosis data -------------------------------------------------------------------------
 
