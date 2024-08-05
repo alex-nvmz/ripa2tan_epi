@@ -13,6 +13,19 @@ library(modelr)
 
 base_path <- ".."
 data_path <- file.path(base_path, "data")
+res_path <- file.path(base_path, "results")
+
+# Functions
+
+save_fullsize_png <- function(p, path, width=19.65, height=10.30) {
+  png(path,
+      width = width,
+      height = height,
+      units = "in",
+      res = 96)
+  print(p)
+  dev.off()
+}
 
 
 # Population data ------------------------------------------------------------------------
@@ -35,7 +48,7 @@ pop <- pop |>
   )
 
 
-# Get population for 2022 by linear interpolation
+# Get population for 2022 by linear prediction
 
 pop |> 
   ggplot() +
@@ -221,22 +234,12 @@ environ_df <- environ_df |>
 environ_df |> 
   print(n=Inf)
 
-# environ_df |> 
-#   filter(district=="Moshi") |> 
-#   as.data.frame() |> 
-#   is.na() |> 
-#   sum()
-# 
-# environ_df |> 
-#   filter(district=="Siha") |> 
-#   as.data.frame() |> 
-#   is.na() |> 
-#   sum()
 
+## Missing data --------------------------------------------------------------------------
 
 var_order <- colnames(environ_df)[3:10]
 
-environ_df |>
+p <- environ_df |>
   pivot_longer(
     cols = population:temp_max,
     names_to="variable",
@@ -252,24 +255,108 @@ environ_df |>
     width=31
   ) +
   scale_fill_manual(
-    values = c("steelblue3", "gray20")
+    values = c("steelblue3", "gray20"),
+    labels = c("No", "Yes")
   ) +
-  # scale_fill_okabe_ito() +
+  labs(
+    fill = "Missing",
+    x = "Month",
+    y = ""
+  ) +
   facet_wrap(
     ~ district,
     ncol=2
+  ) +
+  theme_bw(
+    base_size=22
+  ) +
+  theme(
+    legend.title = element_text(face="bold"),
+    axis.title = element_text(face="bold"),
+    strip.text = element_text(face="bold")
   )
 
 
-environ_df |> 
+save_fullsize_png(
+  p,
+  file.path(res_path, "plots", "environmental-data_missing.png")
+)
+
+
+# Missing data means having to remove that data point from the regression model
+# PM2.5 is the only exposure available until 2022
+# The rest until 2021, or 2020 for Siha
+
+# Try to interpolate the Greenness observations in-between years
+
+imput_df_moshi <- environ_df |> 
+  select(time, greenness, district) |> 
+  filter(district=="Moshi") |> 
+  arrange(time)
+
+imput_df_moshi$greenness_imput <- with(imput_df_moshi, approx(x=time,y=greenness,xout=time,method="linear")$y)
+
+imput_df_siha <- environ_df |> 
+  select(time, greenness, district) |> 
+  filter(district=="Siha") |> 
+  arrange(time)
+
+imput_df_siha$greenness_imput <- with(imput_df_siha, approx(x=time,y=greenness,xout=time,method="linear")$y)
+
+imput_df <- bind_rows(imput_df_moshi, imput_df_siha)
+
+# Check imputations
+
+p <- imput_df |> 
   ggplot() +
   geom_point(
-    aes(x=time, y=greenness, color=district)
+    aes(x=time, y=greenness_imput, group=district),
+    size=2, color="black"
   ) +
   geom_line(
-    aes(x=time, y=greenness, color=district)
+    aes(x=time, y=greenness_imput, group=district),
+    size=0.9, color="black"
+  ) +
+  geom_point(
+    aes(x=time, y=greenness, color=district),
+    size=2
+  ) +
+  geom_line(
+    aes(x=time, y=greenness, color=district),
+    size=0.9
+  ) +
+  scale_x_date(date_breaks="year", date_labels = "%Y") +
+  geom_vline(xintercept = unique(floor_date(imput_df$time, "year")),
+             color="gray70", linetype=2, linewidth=1) +
+  scale_color_okabe_ito() +
+  labs(
+    x="Month",
+    y="Greenness",
+    color="District"
+  ) +
+  theme_bw(
+    base_size=20
+  ) +
+  theme(
+    legend.title = element_text(face="bold"),
+    axis.title = element_text(face="bold")
   )
 
+save_fullsize_png(
+  p,
+  file.path(res_path, "plots", "environmental-data_greenness-interpolation.png")
+)
+
+# Substitute in dataframe
+
+environ_df <- environ_df |> 
+  left_join(imput_df, by = join_by(time, district, greenness)) |> 
+  mutate(
+    greenness = greenness_imput
+  ) |> 
+  select(- greenness_imput)
+
+# Save final data
 
 saveRDS(
   environ_df,

@@ -18,12 +18,6 @@ library(ggeffects)
 library(gtsummary)
 library(broom)
 
-library(marginaleffects)
-library(modelsummary)
-library(tinytable)
-library(performance)
-
-
 # Parameters
 
 base_path <- ".."
@@ -84,6 +78,56 @@ disease_df <- readRDS(
 
 
 # Exploratory analysis ===================================================================
+
+## Missing data --------------------------------------------------------------------------
+
+### Environmental ----
+
+var_order <- colnames(environ_df)[3:10]
+
+p <- environ_df |>
+  pivot_longer(
+    cols = population:temp_max,
+    names_to="variable",
+    values_to="value"
+  ) |> 
+  mutate(
+    variable = factor(variable, levels=var_order)
+  ) |> 
+  ggplot() +
+  geom_tile(
+    aes(x=time, y=variable, fill=is.na(value)),
+    color="black",
+    width=31
+  ) +
+  scale_fill_manual(
+    values = c("steelblue3", "gray20"),
+    labels = c("No", "Yes")
+  ) +
+  labs(
+    fill = "Missing",
+    x = "Month",
+    y = ""
+  ) +
+  facet_wrap(
+    ~ district,
+    ncol=2
+  ) +
+  theme_bw(
+    base_size=22
+  ) +
+  theme(
+    legend.title = element_text(face="bold"),
+    axis.title = element_text(face="bold"),
+    strip.text = element_text(face="bold")
+  )
+
+
+save_fullsize_png(
+  p,
+  file.path(res_path, "plots", "environmental-data_missing.png")
+)
+
 
 ### Diseases ----
 
@@ -738,121 +782,32 @@ mod <- MASS::glm.nb(
   data=df_analysis
 )
 
-# mod <- glm(
-#   n_cases ~ offset(ln_population) + district + time_ind + district:time_ind,
-#   data=df_analysis,
-#   family = quasipoisson()
-# )
-
 # Validate
 par(mfrow = c(2,2))
 plot(mod, ask=FALSE)
 par(mfrow = c(1,1))
 
-tmp <- check_model(mod)
-
-# tmp <- check_model(mod,
-#                    check = c("pp_check", "linearity",
-#                              "homogeneity", "qq"))
-
-tmp |> plot()
-
-
-predictions(mod)
-
-comparisons(mod)
-
-comparisons(mod, variables=list(time_ind = c(12)))
-
-slopes(mod)
-
-predictions(mod, newdata = "mean")
-predictions(mod, newdata = "median")
-
-predictions(mod, newdata = datagrid(
-  district = "Siha",
-  FUN_numeric = median
-))
-
-tmp <- predictions(mod, newdata = datagrid(
-  district = levels,
-  ln_population = log(1e3),
-  FUN_numeric = median
-))
-
-tmp$ln_population
-
-slopes(mod,
-       variables="time_ind",
-       newdata=datagrid(
-         district=levels
-       ))
-
-
-plot_predictions(mod,
-                 condition=list("time_ind", "district", ln_population=log(1e3)))
-
-plot_slopes(
-  mod,
-  variables="time_ind",
-  # variables=list(time_ind = c(13,1)),
-  condition = list(
-    "district"
-  #   # ln_population=log(1e3)
-    ),
-  )
-
-avg_predictions(mod)
-mean(predict(mod, type="response"))
-
-avg_predictions(mod, by="district")
-
-avg_comparisons(mod)
-avg_comparisons(mod, by="district")
-
-avg_predictions(
-  mod,
-  newdata = datagrid(
-    grid_type = "balanced"
-  ),
-  # by="district"
-)
-
-
-datagrid(
-  model = mod,
-  grid_type = "counterfactual",
-  district = levels
-) |> 
-  as_tibble() |> 
-  print(n=Inf)
-
-
-avg_predictions(
-  mod,
-  by="district"
-) |> 
-  inferences(
-    method="boot", R=500
-  )
-
-
-
 # Check coefficients
 summary(mod)
 
-modelsummary(mod,
-             estimate  = "{estimate} [{conf.low}, {conf.high}]"
-             )
-modelplot(mod, coef_omit = "Intercept")
+# 
+# mod_tbl <- confint(mod, level=0.95) |>
+#   as.data.frame() |> 
+#   rownames_to_column("term") |> 
+#   as_tibble() |> 
+#   mutate(
+#     exp_estimate = exp(mod$coefficients),
+#     exp_conf.low = exp(`2.5 %`),
+#     exp_conf.high = exp(`97.5 %`),
+#   )
+# 
+# mod_tbl
+
+
 
 # Results table
 mod |> 
-  tbl_regression(
-    intercept = TRUE,
-    exponentiate=TRUE
-    ) |> 
-  bold_p(0.05)
+  tbl_regression(exponentiate=TRUE)
 
 
 # Data table
@@ -869,7 +824,8 @@ mod_tbl
 # Plot fitted values
 pred_link <- predict(mod, se.fit=TRUE, type="link")
 
-df_analysis |> 
+
+p <- df_analysis |> 
   mutate(
     pred = with(pred_link, exp(fit)),
     pred_low = with(pred_link, exp(fit + qnorm(0.025)*se.fit)),
@@ -906,11 +862,47 @@ df_analysis |>
     axis.title = element_text(face="bold")
   )
 
-
+p
 # Effect plots
 
-predict_response(mod, c("time_ind", "district"),
-                 condition = c(ln_population=log(1e3))) |>
+predict_response(
+  mod, c("time_ind", "district"),
+  condition = c(ln_population=log(1e3))
+  ) |>
+  plot(show_data=FALSE)
+
+
+predict_response(
+  mod, c("time_ind", "district"),
+  offset = log(1e3)
+  # condition = c(ln_population=log(1e3))
+) |>
+  plot(show_data=FALSE)
+
+
+tmp <- predict_response(
+  mod, c("time_ind", "district"),
+  condition = c(ln_population=log(1e3))
+)
+
+
+tmp |> 
+  ggplot() +
+  geom_ribbon(
+    aes(x=x, ymin=conf.low, ymax=conf.high, fill=group),
+    alpha=0.4, show.legend = FALSE
+  ) +
+  geom_point(
+    data=df_analysis,
+    aes(x=time_ind, y=n_cases/population*1e3, color=district),
+    size=2.5
+  )
+
+
+
+
+
+predict_response(mod, c("time_ind", "ln_population", "district")) |>
   plot(show_data=TRUE)
 
 
@@ -924,73 +916,16 @@ predict_response(mod, c("time_ind", "district"),
 df_analysis_moshi <- df_analysis |> 
   filter(district == "Moshi")
 
-library(dlnm)
-library(pbs)
 
-onebasis(df_analysis_moshi$time_ind, "pbs", df=3)
-
-
-# 5 degrees of freedom per year for trend
-df_trend <- df_analysis_moshi$time |>
-  range() |> 
-  diff() |> 
-  as.numeric()
-df_trend <- round(df_trend / 365.25*5)
-
-ns_trend <- ns(df_analysis_moshi$time_ind, knots=equalknots(df_analysis_moshi$time_ind, df=df_trend, fun="ns"))
-
-
-
-cb_pm2p5 <- crossbasis(
-  df_analysis_moshi$pm2p5,
-  lag=c(0,3),
-  arglag=list(fun="integer"),
-  argvar=list(fun="lin")
-  )
-
-summary(cb_pm2p5)
-
-crosspred(cb_pm2p5, mod) |> plot()
-
-cb_pm2p5 <- crossbasis(df_analysis_moshi$pm2p5, lag=3, arglag=list(fun="integer"),)
-cb_pm2p5
-
-df_analysis_moshi$pm2p5 |> length()
-
-onebasis(df_analysis_moshi$pm2p5, "integer")
-
-
-pbs(df_analysis_moshi$time, df=3)
-
-crossbasis()
-
-df_analysis_moshi$pm2p5 |> length()
-
-exphist(df_analysis_moshi$pm2p5, lag=3)
-
-(exp <- sample(1:10))
-
-exphist(exp, 5, 3)
-
-expprof <- as.numeric(seq(250) %in% c(15,100,110,160))
-exphist <- exphist(expprof, lag=c(1,91), fill=0)
-frrlag <- function(lag) exp(-(lag/10)) * 4 + 1
-rrflu <- apply(exphist, 1, function(x) prod(frrlag(1:91)[x==1]))
-
-
-
-
-
-
-
+# 5 degrees of freedom per year
+degfree <- df_analysis_moshi$year |>
+  range() |>
+  diff()*5
 
 mod <- MASS::glm.nb(
-  # n_cases ~ offset(ln_population) + pm2p5 + greenness + n_raindays + temp_mean + ns(time_ind, df=degfree),
-  # n_cases ~ offset(ln_population) + pm2p5 + greenness + n_raindays + temp_mean + ns_trend,
-  n_cases ~ offset(ln_population) + greenness + n_raindays + temp_mean + cb_pm2p5 + ns_trend,
+  n_cases ~ offset(ln_population) + pm2p5 + greenness + n_raindays + ns(time_ind, df=degfree),
   data=df_analysis_moshi
 )
-
 
 # Validate
 par(mfrow = c(2,2))
@@ -1000,77 +935,17 @@ par(mfrow = c(1,1))
 # Check coefficients
 summary(mod)
 
-
-# Results table
-mod |> 
-  tbl_regression(
-    intercept = TRUE,
-    exponentiate=TRUE,
-    include = ! starts_with("ns(")
-  ) |> 
-  bold_p(0.05)
-
-
-# Data table
-mod_tbl <- mod |> 
-  broom::tidy(conf.int=TRUE, conf.level = 0.95, exponentiate=FALSE) |> 
+mod_tbl <- confint(mod, level=0.95) |>
+  as.data.frame() |> 
+  rownames_to_column("term") |> 
+  as_tibble() |> 
   mutate(
-    exp_estimate = exp(estimate),
-    exp_conf.low = exp(conf.low),
-    exp_conf.high = exp(conf.high),
+    exp_estimate = exp(mod$coefficients),
+    exp_conf.low = exp(`2.5 %`),
+    exp_conf.high = exp(`97.5 %`),
   )
 
 mod_tbl
-
-# Plot fitted values
-pred_link <- predict(mod, se.fit=TRUE, type="link")
-
-
-
-mod$model |> 
-  left_join(df_analysis_moshi) |> 
-  mutate(
-    pred = with(pred_link, exp(fit)),
-    pred_low = with(pred_link, exp(fit + qnorm(0.025)*se.fit)),
-    pred_high = with(pred_link, exp(fit + qnorm(0.975)*se.fit))  
-  ) |> 
-  ggplot() +
-  geom_ribbon(
-    aes(x=time, ymin=pred_low/population*1e3, ymax=pred_high/population*1e3, fill=district),
-    alpha=0.4, show.legend = FALSE
-  ) +
-  geom_line(
-    aes(x=time, y=pred/population*1e3, color=district),
-    linewidth=1
-  ) +
-  geom_point(
-    aes(x=time, y=n_cases/population*1e3, color=district),
-    size=2.5
-  ) +
-  scale_x_date(date_breaks="year", date_labels = "%Y")+
-  geom_vline(xintercept = unique(floor_date(df_analysis$time, "year")),
-             color="gray70", linetype=2, linewidth=0.8) +
-  scale_color_okabe_ito() +
-  scale_fill_okabe_ito() +
-  labs(
-    x="Month",
-    y=glue("{var} cases per 1,000 people"),
-    color="District"
-  ) +
-  theme_bw(
-    base_size=20
-  ) +
-  theme(
-    legend.title = element_text(face="bold"),
-    axis.title = element_text(face="bold")
-  )
-
-
-
-
-
-
-
 
 # Effect plots
 
@@ -1078,34 +953,25 @@ predict_response(mod, c("time_ind"),
                  condition = c(ln_population=log(1e3))) |>
   plot(show_data=FALSE)
 
-
 # Time
 
-resp_df <-predict_response(mod, c("time_ind"),
-                           condition = c(ln_population=mod$model$`offset(ln_population)`))
+resp_df <- predict_response(mod, c("time_ind"),
+                            condition = c(ln_population=log(1e3)))
 
-df_analysis_moshi |> 
+p <- df_analysis_moshi |> 
   right_join(resp_df, by=c("time_ind"="x")) |> 
   ggplot() +
   geom_ribbon(
-    aes(x=time, ymin=conf.low/population*1e3, ymax=conf.high/population*1e3, fill=district),
+    aes(x=time, ymin=conf.low, ymax=conf.high, fill=district),
     alpha=0.4, show.legend = FALSE
   ) +
-  # geom_line(
-  #   aes(x=time, y=predicted, color=district),
-  #   linewidth=1
-  # ) +
   geom_line(
-    aes(x=time, y=predicted/population*1e3),
-    linewidth=1, color="black"
+    aes(x=time, y=predicted, color=district),
+    linewidth=1
   ) +
   geom_point(
     aes(x=time, y=n_cases/population*1e3, color=district),
     size=2.5
-  ) +
-  geom_line(
-    aes(x=time, y=n_cases/population*1e3, color=district),
-    size=1
   ) +
   scale_x_date(date_breaks="year", date_labels = "%Y")+
   geom_vline(xintercept = unique(floor_date(df_analysis$time, "year")),
@@ -1165,8 +1031,85 @@ p<- df_analysis_moshi |>
     axis.title = element_text(face="bold")
   )
 
+# No. Rain days
+
+resp_df <- predict_response(mod, c("n_raindays"),
+                            condition = c(ln_population=log(1e3)))
 
 
+resp_df |> 
+  plot(show_data=FALSE)
+
+
+df_analysis_moshi |> 
+  right_join(resp_df, by=c("n_raindays"="x")) |> 
+  ggplot() +
+  geom_ribbon(
+    aes(x=n_raindays, ymin=conf.low, ymax=conf.high, fill=district),
+    alpha=0.4, show.legend = FALSE
+  ) +
+  geom_line(
+    aes(x=n_raindays, y=predicted, color=district),
+    linewidth=1
+  ) +
+  # geom_point(
+  #   aes(x=n_raindays, y=n_cases/population*1e3, color=district),
+  #   size=2.5
+  # ) +
+  scale_color_okabe_ito() +
+  scale_fill_okabe_ito() +
+  labs(
+    x="No. rain days",
+    y=glue("{var} cases per 1,000 people"),
+    color="District"
+  ) +
+  theme_bw(
+    base_size=20
+  ) +
+  theme(
+    legend.title = element_text(face="bold"),
+    axis.title = element_text(face="bold")
+  )
+
+
+# Greenness
+
+resp_df <- predict_response(mod, c("greenness"),
+                            condition = c(ln_population=log(1e3)))
+
+resp_df |> 
+  plot(show_data=FALSE)
+
+
+p <- df_analysis_moshi |> 
+  right_join(resp_df, by=c("greenness"="x")) |> 
+  ggplot() +
+  geom_ribbon(
+    aes(x=greenness, ymin=conf.low, ymax=conf.high, fill=district),
+    alpha=0.4, show.legend = FALSE
+  ) +
+  geom_line(
+    aes(x=greenness, y=predicted, color=district),
+    linewidth=1
+  ) +
+  # geom_point(
+  #   aes(x=greenness, y=n_cases/population*1e3, color=district),
+  #   size=2.5
+  # ) +
+  scale_color_okabe_ito() +
+  scale_fill_okabe_ito() +
+  labs(
+    x="Greenness",
+    y=glue("{var} cases per 1,000 people"),
+    color="District"
+  ) +
+  theme_bw(
+    base_size=20
+  ) +
+  theme(
+    legend.title = element_text(face="bold"),
+    axis.title = element_text(face="bold")
+  )
 
 
 

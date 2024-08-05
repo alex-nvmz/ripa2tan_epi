@@ -4,7 +4,7 @@ format: html
 ---
 
 ```{r}
-base_path <- "."
+base_path <- ".."
 data_path <- file.path(base_path, "data")
 res_path <- file.path(base_path, "results")
 ```

@@ -1,0 +1,4161 @@
+---
+title: "Notebook"
+execute: 
+  warning: false
+toc: true
+toc-depth: 3
+toc-expand: true
+fig-width: 11
+fig-asp: 0.618  # golden ratio
+# fig-height: 6.18
+format:
+  html:
+    grid:
+      body-width: 950px
+    embed-resources: true
+# knitr:
+#   opts_chunk:
+#     out.width: "100%"
+---
+
+Notebook to document RIPA2TAN analysis.
+
+# Setup
+
+```{r}
+library(tidyverse)
+theme_set(theme_bw(base_size = 16))
+library(readxl)
+library(ggokabeito)
+library(ggh4x)  # facet_nested
+```
+
+
+```{r}
+base_path <- ".."
+data_path <- file.path(base_path, "data")
+res_path <- file.path(base_path, "results")
+
+# data_path <- "local_data_path"
+```
+
+# Data processing
+
+
+## Population data
+
+```{r}
+
+# Get yearly population
+pop <- read_excel(
+  file.path(data_path, "raw", "population", "pop_millions.xlsx"),
+  range = cell_cols("B:F")
+  )
+
+# Clean
+pop <- pop |> 
+  select(- c(mil, Year)) |> 
+  rename(
+    date = Date,
+    district = District,
+    population = Population
+  ) |> 
+  mutate(
+    district = case_match(
+      district,
+      .default = district,
+      "Moshi_MC" ~ "Moshi"
+    ),
+    date = as.Date(date)
+  ) |> 
+  relocate(district, date) |> 
+  arrange(district, date)
+
+pop
+
+write_csv(
+  pop,
+  file.path(data_path, "processed", "population.csv")
+)
+
+```
+
+## Environmental data
+
+The environmental data is scattered in different files.
+
+### PM2.5
+
+For PM2.5, originally we received the file 'avgpm25_monthly.csv'. After that, we received 'avg_pm25_monthly_siha_np.csv', with the values for Siha calculated without considering the National Park area (this is better). We will substitute the values of the second file onto the first one.
+
+We also have the monthly data for 2012 and 2013 in separate files.
+
+
+```{r}
+
+pm2p5 <- read_csv(
+  file.path(data_path, "raw", "environmental", "main", "avgpm25_monthly.csv"),
+  col_select = -1
+)
+
+pm2p5
+
+# New PM2.5 data for Siha (without considering National Park area)
+pm2p5_siha <- read_csv(
+  file.path(data_path, "raw", "environmental", "siha_correction", "avg_pm25_monthly_siha_np.csv"),
+  col_select = -1
+)
+
+pm2p5_siha
+
+# Substitute Siha observations in main pm2p5 dataframe
+# New PM2.5 data for Siha (without considering National Park area)
+pm2p5_siha <- pm2p5_siha |> 
+  mutate(
+    District = case_match(
+      District,
+      .default = District,
+      "Siha_without_nationalpark" ~ "Siha"
+    )
+  )
+
+pm2p5 <- pm2p5 |> 
+  left_join(pm2p5_siha, by=c("District", "year", "month")) |> 
+  mutate(
+    avg_pm2.5_monthly = if_else(
+      District == "Siha",
+      avg_pm2.5_sihanp_monthly,
+      avg_pm2.5_monthly
+    )
+  ) |> 
+  select(- avg_pm2.5_sihanp_monthly)
+
+
+# Clean
+pm2p5 <- pm2p5 |> 
+  mutate(
+    date = ym(paste0(year, month))
+  ) |>
+  select(- c(year, month)) |> 
+  rename(
+    district=District,
+    pm2p5=avg_pm2.5_monthly
+  ) |> 
+  relocate(district, date)
+
+pm2p5
+
+# Get 2012 and 2013 data
+pm2p5_2012 <- read_csv(
+  file.path(data_path, "raw", "environmental", "main", "2012_pm2_5.csv"),
+  col_select = -1
+)
+pm2p5_2012
+
+pm2p5_2013 <- read_csv(
+  file.path(data_path, "raw", "environmental", "main", "2013_pm2_5.csv"),
+  col_select = -1
+)
+pm2p5_2013
+
+# Clean
+pm2p5_2012 <- pm2p5_2012 |> 
+  mutate(
+    date = ym(paste0(year, month))
+  ) |>
+  select(- c(year, month)) |> 
+  rename(
+    district=District,
+    pm2p5=avg_pm2.5_monthly
+  ) |> 
+  relocate(district, date)
+
+pm2p5_2013 <- pm2p5_2013 |> 
+  mutate(
+    date = ym(paste0(year, month))
+  ) |>
+  select(- c(year, month)) |> 
+  rename(
+    district=District,
+    pm2p5=avg_pm2.5_monthly
+  ) |> 
+  relocate(district, date)
+
+# Merge
+pm2p5 <- pm2p5 |> 
+  full_join(pm2p5_2013) |> 
+  full_join(pm2p5_2012) |> 
+  arrange(district, date)
+
+pm2p5
+```
+
+### Greenness
+
+```{r}
+green <- read_csv(
+  file.path(data_path, "raw", "environmental", "main", "monthwise_greenness.csv")
+)
+
+green
+
+green <- green |> 
+  pivot_longer(
+    cols = 2:last_col(),
+    names_to = c("district", "month"),
+    values_to = "greenness",
+    names_sep = "_"
+  )
+
+green <- green |> 
+  mutate(
+    date = ym(paste0(year, month))
+  ) |> 
+  select( - c(year, month)) |> 
+  mutate(
+    district = case_match(
+      district,
+      "moshi" ~ "Moshi",
+      "siha" ~ "Siha"
+      )
+  ) |> 
+  relocate(district, date)
+
+green
+```
+
+### Rain
+
+Total rainfall (mm) and No. rain days.
+
+```{r}
+rain <- read_csv(
+  file.path(data_path, "raw", "environmental", "main", "rc_month_rain_satellite.csv"),
+  col_select = -1
+)
+
+rain
+
+rain <- rain |> 
+  mutate(
+    date = ym(paste0(year, month))
+  ) |> 
+  select( - c(year, month)) |> 
+  relocate(district, date) |> 
+  rename(total_rainfall = "Monthly Total Rainfall",
+         n_raindays = "Number of Raindays")
+
+rain
+```
+
+### Temperature
+
+Minimum, mean and maximum temperatures.
+
+```{r}
+temp <- read_csv(
+  file.path(data_path, "raw", "environmental", "main", "sat_temp.csv"),
+  col_select = -1
+)
+
+temp
+
+temp <- temp |> 
+  mutate(
+    date = ym(paste0(year, month))
+  ) |> 
+  select( - c(year, month)) |> 
+  relocate(district, date)
+
+temp <- temp |> 
+  pivot_wider(
+    names_from=variable,
+    values_from=value
+  ) |> 
+  rename(
+    temp_mean = "Monthly mean temperature",
+    temp_min = "Monthly mean minimum temperature",
+    temp_max = "Monthly mean maximum temperature"
+  ) |> 
+  relocate(district, date, temp_min, temp_mean, temp_max)
+
+temp
+```
+
+
+### Heat index
+
+```{r}
+heat_moshi <- read_csv(
+  file.path(data_path, "raw", "environmental", "main", "moshi_utci_2012_oct_2022.csv"),
+  col_select = -1
+)
+
+heat_moshi
+
+heat_siha <- read_csv(
+  file.path(data_path, "raw", "environmental", "main", "siha_utci_2012_oct_2022.csv"),
+  col_select = -1
+)
+
+heat <- full_join(heat_moshi, heat_siha)
+
+heat
+
+heat <- heat |> 
+  mutate(
+    date = ym(paste0(Year, Month))
+  ) |> 
+  select(- c(Year, Month)) |> 
+  rename(
+    district = District,
+    utci = MeanValue
+  ) |> 
+  relocate(district, date)
+
+heat
+```
+
+
+### Merge
+
+```{r}
+df_environ <- pm2p5 |>
+  full_join(green, by=c("date", "district")) |> 
+  full_join(rain, by=c("date", "district")) |> 
+  full_join(temp, by=c("date", "district")) |> 
+  full_join(heat, by=c("date", "district"))
+
+df_environ <- df_environ |> 
+  arrange(district, date)
+
+df_environ |> 
+  print(width=Inf)
+
+# Save
+write_csv(
+  df_environ,
+  file.path(data_path, "processed", "environmental.csv")
+)
+```
+
+
+### Other air quality variables
+
+There is data on other air quality variables from 2018 onward, but I do not understand the format (what is value.ID? Why does one place and time have multiple measurements?).
+
+This data is NO2, O3, SO2 and AOD
+
+```{r}
+# Additional air quality variables (2018-) -----------------------------------------------
+
+# NO2
+
+no2 <- read_csv(
+  file.path(data_path, "raw", "environmental", "other_air-quality", "no2_monthly_2018_2021.csv"),
+  col_select = -1
+)
+
+no2
+
+# O3
+# file.path(data_path, "raw", "environmental", "other_air-quality", "ozone_monthly_2018_2021.csv")
+
+# SO2
+# file.path(data_path, "raw", "environmental", "other_air-quality", "so2_monthly_2018_2021.csv")
+
+# AOD
+# file.path(data_path, "raw", "environmental", "other_air-quality", "AOD_monthly_2018_2021.csv")
+
+```
+
+
+## Disease data
+
+### Moshi
+
+```{r}
+# Moshi
+
+moshi <- read_csv(
+  file.path(data_path, "raw", "disease_v2", "Moshi_monthlydata_cleaned_june_2024.csv"),
+  col_select = -1
+)
+
+moshi |> 
+  print(width = Inf)
+
+moshi <- moshi |> 
+  pivot_longer(
+    cols = Jan:Dec,
+    names_to = "month",
+    values_to = "n_cases"
+  ) 
+
+moshi
+
+moshi <- moshi |> 
+  mutate(
+    date = ym(paste0(Year, month))
+  ) |> 
+  select(- c(Year, month)) |> 
+  mutate(
+    district = "Moshi"
+  ) |> 
+  rename(
+    disease = Diseases,
+    disease_group = Subcategory,
+    disease_communicable = Category
+  ) |> 
+  relocate(district, date, disease, disease_group, disease_communicable, n_cases)
+  
+moshi
+```
+
+### Siha
+
+```{r}
+# Siha
+
+siha <- read_csv(
+  file.path(data_path, "raw", "disease_v2", "Siha_monthlydata_cleaned_june_2024.csv"),
+  col_select = -1
+)
+
+siha |> 
+  print(width = Inf)
+
+siha <- siha |> 
+  pivot_longer(
+    cols = Jan:Dec,
+    names_to = "month",
+    values_to = "n_cases"
+  ) 
+
+siha
+
+siha <- siha |> 
+  mutate(
+    date = ym(paste0(Year, month))
+  ) |> 
+  select(- c(Year, month, District)) |> 
+  mutate(
+    district = "Siha"
+  ) |> 
+  rename(
+    disease = Diseases,
+    disease_group = Subcategory,
+    disease_communicable = Category
+  ) |> 
+  relocate(district, date, disease, disease_group, disease_communicable, n_cases)
+  
+siha
+```
+
+
+### Merge
+
+```{r}
+df_disease <- full_join(moshi, siha, by=colnames(moshi))
+
+df_disease <- df_disease |> 
+  arrange(district, disease, date)
+
+df_disease
+```
+
+
+```{r}
+df_disease$disease |> table()
+```
+
+Diseases differ in the number of observations. Snake And Insect Bites repeated.
+
+```{r}
+df_disease$disease_group |> table()
+
+df_disease$disease_communicable |> table()
+```
+
+
+```{r}
+# Fix category
+df_disease <- df_disease |> 
+  mutate(
+    disease = case_match(
+      disease,
+      .default = disease,
+      "Snake And Insect Bites" ~ "Snake and Insect Bites"
+    )
+  )
+```
+
+The 'disease' category is the most important one for the analyses. Categories 'disease_group' and 'disease_communicable' are relevant for the discussion. The groupings will be changed according to Chrysanthi and Harald's notes.
+
+
+```{r}
+# Save
+write_csv(
+  df_disease,
+  file.path(data_path, "processed", "disease.csv")
+)
+```
+
+
+
+## Missing data and imputation
+
+Evaluate missingness with respect to time.
+
+```{r}
+pop$date |> range()
+
+df_disease$date |> range()
+
+df_environ$date |> range()
+
+total_range <- c(pop$date, df_disease$date, df_environ$date) |>
+  range()
+total_range
+```
+
+The most important range is the one of the disease data, which is the one that is relevant for the regression analysis: 2014-01-01 to 2022-12-01.
+
+If we have missings on any of the regressors, we will not be able to include that observation in the regression.
+
+We are missing the population for 2022, and this is vital for the analysis. We will impute it.
+
+We will impute each univariate time series when appropriate by **Kalman smoothing**. For the yearly data (population),  a state space model with local trend will be used. For the monthly data, a state space model with local trend and yearly seasonal component will be used.
+
+Let us evaluate the missingness for each variable.
+
+### Population
+
+```{r}
+# Visualize population
+pop |> 
+  ggplot() +
+  geom_point(
+    aes(x=date, y=population, color=district)
+  )
+```
+
+Population has been increasing linearly each year. We will impute the population of 2022 with Kalman smoothing, assuming a local trend model.
+
+```{r}
+library(imputeTS)
+
+# Dataframe to store imputed data
+pop_impute <- pop
+
+# Prepare df with missings for 2022
+pop_impute <- pop_impute |> 
+  full_join(data.frame(date = seq(total_range[1], total_range[2], by="year"))) |> 
+  complete(district, date) |> 
+  drop_na(district)
+
+# Prepare df with Moshi time series
+pop_impute_moshi <- pop_impute |> 
+  filter(district == "Moshi") |> 
+  arrange(date)
+
+# Create ts object for imputation
+pop_impute_moshi_ts <- ts(pop_impute_moshi$population, frequency=1)
+
+# Impute
+pop_impute_moshi <- pop_impute_moshi |> 
+  mutate(
+    population_imp = na_kalman(pop_impute_moshi_ts, model="StructTS", smooth=TRUE, type="trend")
+  )
+
+# Repeat for Siha
+pop_impute_siha <- pop_impute |> 
+  filter(district == "Siha") |> 
+  arrange(date)
+
+pop_impute_siha_ts <- ts(pop_impute_siha$population, frequency=1)
+
+pop_impute_siha <- pop_impute_siha |> 
+  mutate(
+    population_imp = na_kalman(pop_impute_siha_ts, model="StructTS", smooth=TRUE, type="trend")
+  )
+
+# Merge
+pop_impute <- pop_impute_moshi |> 
+  full_join(pop_impute_siha)
+
+# Population should be integer
+pop_impute <- pop_impute |> 
+  mutate(
+    population_imp = round(population_imp)
+  )
+
+# Visualize imputation
+pop_impute |> 
+  mutate(
+    imputed = if_else(is.na(population), "Yes", "No")
+  ) |> 
+  ggplot() +
+  geom_point(
+    aes(x=date, y=population_imp, color=district, shape=imputed), size=2.5
+  ) +
+  geom_line(
+    aes(x=date, y=population_imp, color=district)
+  ) +
+  scale_shape_manual(
+    values = c(16,4)
+  )
+
+# Save
+pop_impute_save <- pop_impute |> 
+  select(- population) |> 
+  rename(population = population_imp)
+
+write_csv(
+  pop_impute_save,
+  file.path(data_path, "processed", "population_imputed.csv")
+)
+```
+
+
+### Environmental
+
+```{r}
+# Visualize missingness
+
+var_order <- colnames(df_environ)[3:10]
+
+df_environ |>
+  pivot_longer(
+    cols = pm2p5:utci,
+    names_to="variable",
+    values_to="value"
+  ) |> 
+  mutate(
+    variable = factor(variable, levels=var_order)
+  ) |>
+  ggplot() +
+  geom_tile(
+    aes(x=date, y=variable, fill=is.na(value)),
+    color="black",
+    width=31
+  ) +
+  scale_fill_manual(
+    values = c("steelblue3", "gray20"),
+    labels = c("No", "Yes")
+  ) +
+  labs(
+    fill = "Missing",
+    x = "Month",
+    y = ""
+  ) +
+  facet_wrap(
+    ~ district,
+    ncol=2
+  ) +
+  theme(
+    legend.title = element_text(face="bold"),
+    axis.title = element_text(face="bold"),
+    strip.text = element_text(face="bold")
+  )
+```
+
+Greenness and UTCI have some missing values in the middle of their time series, so it could be reasonable to impute them.
+
+Temperature, rain and greenness are missing for 2022, and this data is not available. We could make forecasts for this data, but I think including the forecasts in the regression could bias our results. We should exclude 2022 from the regression.
+
+Rain is missing for Siha for 2021. I think we should forecast it.
+
+A multivariate state space model with the rain variables for Moshi and Siha could be useful for the imputation (i.e. consider the multivariate normal vector [rain_siha, rain_moshi]), but we will do the forecasts in the univariate case for simplicity when implementing the code.
+
+
+```{r}
+library(mgcv)
+library(gratia)
+library(marginaleffects)
+library(patchwork)
+library(glue)
+library(ggokabeito)
+
+
+# TODO
+# Visualize splines
+
+# Prepare data for modelling
+df_environ_model <- df_environ
+
+df_environ_model <- df_environ_model |> 
+  mutate(
+    time_ind = interval(min(date), date) / months(1) + 1,
+    year_ind = year(date) - min(year(date)) + 1,
+    month_ind = month(date),
+    district = factor(district, levels=c("Moshi", "Siha"))
+  )
+
+
+
+env_analysis <- function(var, df, family, label,
+                         transform=\(x) x, inv_transform=\(x) x){
+  
+  cat(glue("
+  \n\n\n
+  ========================================================================================    
+                        Doing analysis for environemntal variable:
+                                        {label}
+  ========================================================================================
+  
+  "))
+  print(var)
+  
+  # Rename response to 'y'
+  df <- rename(df, y := {{var}})
+  
+  # Date range for which there are observations
+  date_range_plot <- df |> 
+    filter(! is.na(y)) |> 
+    pull(date) |> 
+    range()
+  
+  # Step 1: Plot the response ------------------------------------------------------------
+
+  p_var <- df |>
+    ggplot() +
+    geom_vline(
+      aes(xintercept = floor_date(date, "year")), linewidth=0.5, color="gray70"
+    ) +
+    geom_line(
+      aes(x=date, y=y, color=district), linewidth=0.8
+    ) +
+    geom_point(
+      aes(x=date, y=y, color=district), size=2.5
+    ) +
+    scale_x_date(
+      date_breaks="year", date_labels = "%Y",
+      limits = date_range_plot
+    ) +
+    scale_color_okabe_ito() +
+    theme_bw(base_size = 18) +
+    labs(
+      color = "District",
+      x = "Date",
+      y = label
+    )
+  print(p_var)
+  
+  # Transform the response
+  # df <- mutate(df, y = transform(y))
+  
+  # Step 2: Fit the model ----------------------------------------------------------------
+  
+  # Penalized GAM
+  # Contains penalized smooth functions of time and month
+  # Function of time (trend) is cubic splines with a maximum complexity of 10 knots (1 per year)
+  # Function of month (seasonal component) is cyclic cubic splines with a maximum complexity of 12 knots
+  # We allow the seasonal and trend components to interact, so the seasonal component can
+  # change over time. The interaction is computed with a tensor product of the two functions
+  
+  # Number of knots: 10
+  # df |> 
+  #   filter(! is.na(y)) |> 
+  #   pull(date) |> 
+  #   year() |> 
+  #   range() |> 
+  #   diff()+1
+  
+  # form <- y ~ 0 + district + 
+  #   ti(time_ind, bs="cr", k=10, by=district) + 
+  #   ti(month_ind, bs="cc", k=12, by=district) + 
+  #   ti(time_ind, month_ind, bs=c("cr", "cc"), k=c(10,12), by=district)
+  
+  form <- transform(y) ~ 0 + district +
+    ti(time_ind, bs="cr", k=10, by=district) +
+    ti(month_ind, bs="cc", k=12, by=district) +
+    ti(time_ind, month_ind, bs=c("cr", "cc"), k=c(10,12), by=district)
+  
+  # form2 <- y ~ 0 + district + 
+  #   te(time_ind, month_ind, bs=c("cr", "cc"), k=c(10, 12), by=district)
+  
+  # Start and end points of monthly cyclic splines
+  # note: Slightly out of c(1,12) to not impose that January (1) is equal to December (12)
+  knots = list(month_ind = c(0.5, 12.5))
+  
+  mod <- gam(
+    form,
+    data=df,
+    family = family,
+    method = "REML",
+    knots = knots
+    )
+  
+  # Step 3: Check the model
+  
+  # Check terms and significance
+  print(summary(mod))
+  # Check model assumptions
+  p_diag <- gratia::appraise(mod)
+  print(p_diag)
+  # Check effect plots
+  # gratia::draw(mod)
+  
+  # Step 4: Get predictions, as well as decomposition into trend, seasonal and residual ----
+  
+  # note: Standard errors computed by Delta method (marginaleffects default)
+  
+  pred_df <- df
+  
+  # Get predictions for the response
+  pred_name <- "pred"
+  
+  pred_df_sub <- predictions(
+    mod,
+    newdata = df,
+    type = "response",
+    # Apply inverse transformation
+    transform = inv_transform
+  ) |> 
+    as_tibble() |> 
+    select(time_ind, district, estimate, conf.low, conf.high) |> 
+    rename(
+      "{pred_name}" := estimate,
+      "{pred_name}_conf.low" := conf.low,
+      "{pred_name}_conf.high" := conf.high,
+    )
+  
+  pred_df <- pred_df |> 
+    left_join(pred_df_sub)
+  
+  # Predictions for trend
+  pred_name <- "trend"
+  
+  exclude_set <- c(
+    as.character(glue("ti(month_ind):district{levels(pred_df$district)}")),
+    as.character(glue("ti(time_ind,month_ind):district{levels(pred_df$district)}"))
+  )
+  
+  pred_df_sub <- predictions(
+    mod,
+    newdata = df,
+    exclude = exclude_set,
+    type = "response",
+    # Do not apply inverse transformation (it should be applied to the full linear predictor)
+    # transform = inv_transform
+  ) |> 
+    as_tibble() |> 
+    select(time_ind, district, estimate, conf.low, conf.high) |> 
+    rename(
+      "{pred_name}" := estimate,
+      "{pred_name}_conf.low" := conf.low,
+      "{pred_name}_conf.high" := conf.high,
+    )
+  
+  pred_df <- pred_df |> 
+    left_join(pred_df_sub)
+  
+  # Predictions for seasonality
+  pred_name <- "season"
+  
+  exclude_set <- c(
+    "district",
+    as.character(glue("ti(time_ind):district{levels(pred_df$district)}"))
+  )
+  
+  pred_df_sub <- predictions(
+    mod,
+    newdata = df,
+    exclude = exclude_set,
+    type = "response",
+  ) |> 
+    as_tibble() |> 
+    select(time_ind, district, estimate, conf.low, conf.high) |> 
+    rename(
+      "{pred_name}" := estimate,
+      "{pred_name}_conf.low" := conf.low,
+      "{pred_name}_conf.high" := conf.high,
+    )
+  
+  pred_df <- pred_df |> 
+    left_join(pred_df_sub)
+  
+  # Add response residuals
+  pred_df <- pred_df |> 
+    left_join(cbind(mod$model, residuals = residuals(mod, type="response")))
+  
+  # pred_df |>
+  #   print(width=Inf)
+
+  
+  # Step 5: Plot time series decomposition -----------------------------------------------
+  
+  # Reference bar for y scale
+  barlength <- select(pred_df, c(y, pred:residuals)) |> 
+    sapply(\(x) diff(range(x, na.rm=TRUE))) |> 
+    min()
+  
+  # Plot fitted line
+  p_fit <- pred_df |> 
+    filter(date >= date_range_plot[1] & date <= date_range_plot[2]) |> 
+    ggplot() +
+    geom_vline(
+      aes(xintercept = floor_date(date, "year")), linewidth=0.5, color="gray70"
+    ) +
+    geom_vline(
+      aes(xintercept = max(floor_date(date, "year")) + years(1)), linewidth=0.5, color="gray70"
+    ) +
+    geom_point(
+      aes(x=date, y=y, color=district), size=2.5
+    ) + 
+    geom_line(
+      aes(x=date, y=pred, color=district), linewidth=0.8
+    ) +
+    geom_ribbon(
+      aes(x=date, ymin=pred_conf.low, ymax=pred_conf.high, fill=district),
+      alpha=0.2
+    ) +
+    geom_rect(
+      aes(
+        xmin=max(date_range_plot)+60, xmax=max(date_range_plot)+90,
+        ymin=mean(y, na.rm=TRUE) - (barlength/2),
+        ymax=mean(y, na.rm=TRUE) + (barlength/2)
+      ),
+      color="black", fill="gray75"
+    ) +
+    scale_x_date(
+      date_breaks="year", date_labels = "%Y"
+    ) +
+    scale_color_okabe_ito() +
+    scale_fill_okabe_ito() +
+    theme_bw(base_size = 18) +
+    labs(
+      color = "District",
+      fill = "District",
+      x = "Date",
+      y = label
+    )
+  
+  # Plot trend
+  p_trend <- pred_df |> 
+    filter(date >= date_range_plot[1] & date <= date_range_plot[2]) |> 
+    ggplot() +
+    geom_vline(
+      aes(xintercept = floor_date(date, "year")), linewidth=0.5, color="gray70"
+    ) +
+    geom_vline(
+      aes(xintercept = max(floor_date(date, "year")) + years(1)), linewidth=0.5, color="gray70"
+    ) +
+    geom_line(
+      aes(x=date, y=trend, color=district), linewidth=0.8
+    ) +
+    geom_ribbon(
+      aes(x=date, ymin=trend_conf.low, ymax=trend_conf.high, fill=district),
+      alpha=0.2
+    ) +
+    geom_rect(
+      aes(
+        xmin=max(date_range_plot)+60, xmax=max(date_range_plot)+90,
+        ymin=mean(trend, na.rm=TRUE) - (barlength/2),
+        ymax=mean(trend, na.rm=TRUE) + (barlength/2)
+      ),
+      color="black", fill="gray75"
+    ) +
+    scale_x_date(
+      date_breaks = "year", date_labels = "%Y"
+    ) +
+    scale_color_okabe_ito() +
+    scale_fill_okabe_ito() +
+    theme_bw(base_size = 18) +
+    labs(
+      color = "District",
+      fill = "District",
+      x = "Date",
+      y = "Trend"
+    )
+  
+  # Plot seasonal component
+  p_season <- pred_df |> 
+    filter(date >= date_range_plot[1] & date <= date_range_plot[2]) |> 
+    ggplot() +
+    geom_vline(
+      aes(xintercept = floor_date(date, "year")), linewidth=0.5, color="gray70"
+    ) +
+    geom_vline(
+      aes(xintercept = max(floor_date(date, "year")) + years(1)), linewidth=0.5, color="gray70"
+    ) +
+    geom_line(
+      aes(x=date, y=season, color=district), linewidth=0.8
+    ) +
+    geom_ribbon(
+      aes(x=date, ymin=season_conf.low, ymax=season_conf.high, fill=district),
+      alpha=0.2
+    ) +
+    geom_rect(
+      aes(
+        xmin=max(date_range_plot)+60, xmax=max(date_range_plot)+90,
+        ymin=mean(season, na.rm=TRUE) - (barlength/2),
+        ymax=mean(season, na.rm=TRUE) + (barlength/2)
+      ),
+      color="black", fill="gray75"
+    ) +
+    scale_x_date(
+      date_breaks = "year", date_labels = "%Y"
+    ) +
+    scale_color_okabe_ito() +
+    scale_fill_okabe_ito() +
+    theme_bw(base_size = 18) +
+    labs(
+      color = "District",
+      fill = "District",
+      x = "Date",
+      y = "Seasonality"
+    )
+  
+  # Plot residuals
+  p_resid <- pred_df |>
+    filter(date >= date_range_plot[1] & date <= date_range_plot[2]) |> 
+    ggplot() +
+    geom_vline(
+      aes(xintercept = floor_date(date, "year")), linewidth=0.5, color="gray70"
+    ) +
+    geom_vline(
+      aes(xintercept = max(floor_date(date, "year")) + years(1)), linewidth=0.5, color="gray70"
+    ) +
+    geom_segment(
+      aes(x=date, y=0, yend=residuals, color=district), linewidth= 1.5, lineend = "butt",
+      position = position_dodge(width=20)
+    ) +
+    geom_hline(yintercept = 0) +
+    ylab("residuals") +
+    geom_rect(
+      aes(
+        xmin=max(date_range_plot)+60, xmax=max(date_range_plot)+90,
+        ymin=mean(residuals, na.rm=TRUE) - (barlength/2),
+        ymax=mean(residuals, na.rm=TRUE) + (barlength/2)
+      ),
+      color="black", fill="gray75"
+    ) +
+    scale_x_date(
+      date_breaks = "year", date_labels = "%Y"
+    ) +
+    scale_color_okabe_ito() +
+    scale_fill_okabe_ito() +
+    theme_bw(base_size = 18) +
+    labs(
+      color = "District",
+      x = "Date",
+      y = "Residuals"
+    )
+  
+  
+  # Merge plots
+  p_joint <- p_fit / (p_trend + theme(legend.position = "none")) /
+    (p_season + theme(legend.position = "none"))  /
+    (p_resid + theme(legend.position = "none")) +
+    plot_layout(axes = "collect", guides="collect")
+  
+  print(p_joint)
+  
+  
+  # Step 6: Make contrasts for the trend -------------------------------------------------
+  
+  # - Trend change between 2012-01 and 2021-12
+  
+  # Possibly
+  # - Trend difference between Moshi and Siha
+  # - Slope of the trend
+  
+  # Standard errors computed with Delta method (see marginaleffects package)
+  
+  # -------------------------------------------.
+  
+  # - Trend change between 2012-01 and 2021-12
+  
+  # Check what values of time_ind and month_ind we need for the contrast
+  # df |> 
+  #   filter(date %in% c("2012-01-01", "2021-12-01")) |> 
+  #   print(width=Inf)
+  
+  # Exclude terms to make predictions for the trend
+  exclude_set <- c(
+    as.character(glue("ti(month_ind):district{levels(pred_df$district)}")),
+    as.character(glue("ti(time_ind,month_ind):district{levels(pred_df$district)}"))
+  )
+  
+  cat("
+    Doing contrasts for the trend:
+    ")
+  
+  # Query explanation:
+  # For the observations we had at 2012-01 (time_ind==1, month_ind==1),
+  # what is the effect on the trend of changing time_ind to 120 and month_ind to 12 (date being 2021-12)
+  
+  # Difference
+  contrast_trend_diff <- comparisons(
+    mod,
+    newdata = filter(df, time_ind==1),
+    variables = list(time_ind = c(1, 120),
+                     month_ind = c(1, 12)),
+    cross = TRUE,
+    comparison = "difference",
+    type = "response",
+    exclude = exclude_set,
+    
+  ) |> 
+    as_tibble()
+  
+  cat("
+      2012-01-01 to 2021-12-01 difference:
+      ")
+  contrast_trend_diff |> 
+    print(width=Inf)
+  
+  # contrast_trend_diff |> 
+  #   ggplot() +
+  #   geom_point(
+  #     aes(x=district, y=estimate)
+  #   ) +
+  #   geom_linerange(
+  #     aes(x=district, ymin=conf.low, ymax=conf.high)
+  #   )
+  
+  # Difference in differences test
+  contrast_trend_diff_diff <- comparisons(
+    mod,
+    newdata = filter(df, time_ind==1),
+    variables = list(time_ind = c(1, 120),
+                     month_ind = c(1, 12)),
+    cross = TRUE,
+    comparison = "difference",
+    type = "response",
+    exclude = exclude_set,
+    # Test for the equality of both estimates
+    hypothesis = "b1 = b2"
+  ) |> 
+    as_tibble()
+  
+  cat("
+      2012-01-01 to 2021-12-01 difference in differences:
+      ")
+  contrast_trend_diff_diff |> 
+    print(width=Inf)
+  
+  # contrast_trend_diff_diff |> 
+  #   ggplot() +
+  #   geom_point(
+  #     aes(x=1, y=estimate)
+  #   ) +
+  #   geom_linerange(
+  #     aes(x=1, ymin=conf.low, ymax=conf.high)
+  #   )
+  
+  # Relative change
+  contrast_trend_rc <- comparisons(
+    mod,
+    newdata = filter(df, time_ind==1),
+    variables = list(time_ind = c(1, 120),
+                     month_ind = c(1, 12)),
+    cross = TRUE,
+    comparison = "lift",
+    type = "response",
+    exclude = exclude_set
+  ) |> 
+    as_tibble()
+  
+  cat("
+      2012-01-01 to 2021-12-01 relative change:
+      ")
+  contrast_trend_rc |> 
+    print(width=Inf)
+  
+  # Difference in relative changes test
+  contrast_trend_rc_diff <- comparisons(
+    mod,
+    newdata = filter(df, time_ind==1),
+    variables = list(time_ind = c(1, 120),
+                     month_ind = c(1, 12)),
+    cross = TRUE,
+    comparison = "lift",
+    type = "response",
+    exclude = exclude_set,
+    hypothesis = "b1 = b2"
+  ) |> 
+    as_tibble()
+  cat("
+      2012-01-01 to 2021-12-01 difference in relative change:
+      ")
+  print(contrast_trend_rc_diff)
+  
+  # - Trend difference between Moshi and Siha
+  # Could also compute the trend difference between Moshi and Siha at every time point
+  
+  # comparisons(
+  #   mod,
+  #   variables = "district",
+  #   comparison = "difference",
+  #   type = "response",
+  #   exclude = exclude_set
+  #   ) |> 
+  #   as_tibble() |> 
+  #   ggplot() +
+  #   geom_line(
+  #     aes(x=time_ind, y=estimate)
+  #   ) +
+  #   geom_ribbon(
+  #     aes(x=time_ind, ymin=conf.low, ymax=conf.high), alpha=0.2
+  #   )
+  
+  # - Slope of the trend
+  # Could also compute slope of the trend at every time point
+  
+  # slopes(
+  #   mod,
+  #   variables = "time_ind",
+  #   exclude = exclude_set,
+  # ) |> 
+  #   as_tibble() |> 
+  #   ggplot() +
+  #   geom_line(
+  #     aes(x=time_ind, y=estimate, color=district)
+  #   ) +
+  #   geom_ribbon(
+  #     aes(x=time_ind, ymin=conf.low, ymax=conf.high, fill=district), alpha=0.2
+  #   )
+  
+  
+  
+  # Step 7: Show imputation / forecast:
+  p_imp <- pred_df |>
+    mutate(
+      y_imp = if_else(is.na(y), pred, y),
+      imputed = if_else(is.na(y), "Yes", "No")
+    ) |> 
+    ggplot() +
+    geom_vline(
+      aes(xintercept = floor_date(date, "year")), linewidth=0.5, color="gray70"
+    ) +
+    geom_line(
+      aes(x=date, y=y_imp, color=district), linewidth=0.8
+    ) +
+    geom_point(
+      aes(x=date, y=y_imp, color=district, shape=imputed, size=imputed),
+    ) +
+    scale_shape_manual(
+      values = c(16,4)
+    ) +
+    scale_size_manual(
+      values = c(2.5,8)
+    ) +
+    scale_x_date(
+      date_breaks="year", date_labels = "%Y",
+      limits = date_range_plot
+    ) +
+    scale_color_okabe_ito() +
+    theme_bw(base_size = 18) +
+    labs(
+      color = "District",
+      x = "Date",
+      y = label,
+      shape = "Imputed",
+      size = "Imputed"
+    )
+  print(p_imp)
+  
+  
+  # Results
+  res <- list(
+    mod = mod,
+    pred_df = pred_df,
+    plots = list(
+      p_var = p_var,
+      p_diag = p_diag,
+      p_fit = p_fit,
+      p_trend = p_trend,
+      p_season = p_season,
+      p_resid = p_resid,
+      p_joint = p_joint,
+      p_imp = p_imp
+    ),
+    contrasts = list(
+      contrast_trend_diff = contrast_trend_diff,
+      contrast_trend_diff_diff = contrast_trend_diff_diff,
+      contrast_trend_rc = contrast_trend_rc,
+      contrast_trend_rc_diff = contrast_trend_rc_diff
+    )
+  )
+  res
+  
+  return(res)
+}
+```
+
+
+```{r}
+#| eval: false
+
+colnames(df_environ_model)
+
+call_list <- list(
+  "pm2p5" = list(var="pm2p5", df=df_environ_model, family=gaussian(),
+                 label="PM2.5 (\U03BCg/m\U00B3)"),
+  "greenness" = list(var="greenness", df=df_environ_model, family=gaussian(),
+                     label="Greenness (NDVI)"),
+  "temp_min" = list(var="temp_min", df=df_environ_model, family=gaussian(),
+                    label="Min. temperature (ºC)"),
+  "temp_mean" = list(var="temp_mean", df=df_environ_model, family=gaussian(),
+                     label="Mean temperature (ºC)"),
+  "temp_max" = list(var="temp_max", df=df_environ_model, family=gaussian(),
+                    label="Max. temperature (ºC)"),
+  "utci" = list(var="utci", df=df_environ_model, family=gaussian(), label="UTCI"),
+  "total_rainfall" = list(var="total_rainfall", df=df_environ_model,
+                          family=Gamma(link="log"), label="Rainfall (mm)",
+                          transform = \(x) x+1, inv_transform = \(x) ifelse(x-1<0, 0, x-1)),
+  "n_raindays" = list(var="n_raindays", df=df_environ_model,
+                      family=mgcv::nb(link="log"), label="No. rain days",
+                      transform = \(x) x+1, inv_transform = \(x) ifelse(x-1<0, 0, x-1))
+  )
+
+res <- lapply(
+  call_list,
+  \(x) do.call(env_analysis, x)
+)
+
+
+
+# res$total_rainfall$plots$p_var
+# res1$total_rainfall$plots$p_joint
+# 
+# res$n_raindays$plots$p_var
+# res$n_raindays$plots$p_diag
+# res$n_raindays$plots$p_joint
+
+
+```
+
+
+```{r}
+#| eval: false
+
+
+# Step 7: Set up imputed variables
+  
+  
+  
+  
+  pred_df |> 
+    mutate(
+      imputed = if_else(is.na(y), "Yes", "No"),
+    ) |> 
+    ggplot() +
+    geom_point(
+      aes(x=date, y=pred, color=district, shape=imputed, size=imputed),
+    ) +
+    geom_line(
+      aes(x=date, y=pred, color=district)
+    ) +
+    scale_shape_manual(
+      values = c(16,4)
+    ) +
+    scale_size_manual(
+      values = c(2.5,8)
+    ) +
+    scale_x_date(
+      date_breaks = "year", date_labels = "%Y",
+      limits = as.Date(c("2012-01-01", "2021-12-01"))
+    ) +
+    geom_vline(xintercept = unique(floor_date(df_environ_model$date, "year")),
+               color="gray1", linetype=1, linewidth=0.2)
+  
+
+p +
+  xlim(as.Date(c("2012-01-01", "2021-12-01"))) +
+  theme_bw(base_size = 18) +
+  scale_color_okabe_ito()
+
+
+# Prepare data for modelling
+df_environ_model <- df_environ
+
+df_environ_model <- df_environ_model |> 
+  mutate(
+    time_ind = interval(min(date), date) / months(1) + 1,
+    year_ind = year(date) - min(year(date)) + 1,
+    month_ind = month(date),
+    district = factor(district, levels=c("Moshi", "Siha"))
+  )
+
+# Table to save predictions
+df_environ_impute <- df_environ
+
+# Step 1: Plot the response
+
+df_environ_model |> 
+  ggplot() +
+  geom_line(
+    aes(x=date, y=greenness, color=district)
+  ) +
+  geom_point(
+    aes(x=date, y=greenness, color=district)
+  ) +
+  scale_x_date(date_breaks="year", date_labels = "%Y",
+               limits = as.Date(c("2012-01-01", "2021-12-01"))) +
+  geom_vline(xintercept = unique(floor_date(df_environ_model$date, "year")),
+             color="gray1", linetype=2, linewidth=0.8)
+
+
+# Step 2: Fit the model
+
+# TODO
+# Write alternative model formula with te()
+
+mod <- gam(
+  greenness ~ 0 + district + ti(time_ind, bs="cr", k=10, by=district) + ti(month_ind, bs="cc", k=12, by=district) + 
+    ti(time_ind, month_ind, bs=c("cr", "cc"), k=c(10,12), by=district),
+  data=df_environ_model,
+  family = gaussian(),
+  method = "REML",
+  # knots = list(month_ind = c(0,12))
+  knots = list(month_ind = c(0.5,12.5))
+  )
+
+
+# Step 3: Check the model
+
+mod
+summary(mod)
+
+gratia::appraise(mod)
+
+mod |> draw()
+
+# Step 4: Get predictions, as well as decomposition into trend, seasonal and residual
+
+
+pred_df <- df_environ_model
+
+# Get predictions for the response
+
+pred_name <- "pred"
+
+pred_df_sub <- predictions(
+  mod,
+  newdata = df_environ_model
+) |> 
+  as_tibble() |> 
+  select(time_ind, district, estimate, conf.low, conf.high) |> 
+  rename(
+    "{pred_name}" := estimate,
+    "{pred_name}_conf.low" := conf.low,
+    "{pred_name}_conf.high" := conf.high,
+  )
+
+
+pred_df <- pred_df |> 
+  left_join(pred_df_sub)
+
+# Predictions for trend
+
+pred_name <- "trend"
+
+
+exclude_set <- c(
+  as.character(glue("ti(month_ind):district{levels(pred_df$district)}")),
+  as.character(glue("ti(time_ind,month_ind):district{levels(pred_df$district)}"))
+)
+
+exclude_set
+
+
+pred_df_sub <- predictions(
+  mod,
+  newdata = df_environ_model,
+  exclude = exclude_set
+) |> 
+  as_tibble() |> 
+  select(time_ind, district, estimate, conf.low, conf.high) |> 
+  rename(
+    "{pred_name}" := estimate,
+    "{pred_name}_conf.low" := conf.low,
+    "{pred_name}_conf.high" := conf.high,
+  )
+
+pred_df <- pred_df |> 
+  left_join(pred_df_sub)
+
+# Predictions for seasonality
+
+pred_name <- "season"
+
+exclude_set <- c(
+  "district",
+  as.character(glue("ti(time_ind):district{levels(pred_df$district)}"))
+)
+
+exclude_set
+
+pred_df_sub <- predictions(
+  mod,
+  newdata = df_environ_model,
+  exclude = exclude_set
+) |> 
+  as_tibble() |> 
+  select(time_ind, district, estimate, conf.low, conf.high) |> 
+  rename(
+    "{pred_name}" := estimate,
+    "{pred_name}_conf.low" := conf.low,
+    "{pred_name}_conf.high" := conf.high,
+  )
+
+pred_df <- pred_df |> 
+  left_join(pred_df_sub)
+
+
+# Add residuals
+
+pred_df <- pred_df |> 
+  left_join(cbind(mod$model, residuals = mod$residuals))
+
+
+pred_df |> 
+  print(width=Inf)
+
+
+# Step 5: Plot time series decomposition
+
+
+
+
+
+barlength <- select(pred_df, c(greenness, pred:residuals)) |> 
+  sapply(\(x) diff(range(x, na.rm=TRUE))) |> 
+  min()
+
+pred_df |> 
+  ggplot() +
+  geom_point(
+    aes(x=date, y=greenness, color=district)
+  ) +
+  geom_line(
+    aes(x=date, y=greenness, color=district)
+  ) +
+  geom_rect(
+    aes(
+      xmin=max(date)+60, xmax=max(date)+90,
+      ymin=mean(greenness, na.rm=TRUE) - (barlength/2),
+      ymax=mean(greenness, na.rm=TRUE) + (barlength/2)
+    ),
+    color="black", fill="gray75"
+  ) +
+  scale_x_date(
+    date_breaks = "year", date_labels = "%Y",
+    limits = as.Date(c("2012-01-01", "2021-12-01"))
+  ) +
+  geom_vline(xintercept = unique(floor_date(df_environ_model$date, "year")),
+             color="gray1", linetype=1, linewidth=0.2)
+
+
+p1 <- pred_df |> 
+  ggplot() +
+  geom_point(
+    aes(x=date, y=greenness, color=district)
+  ) +
+  geom_line(
+    aes(x=date, y=pred, color=district)
+  ) +
+  geom_ribbon(
+    aes(x=date, ymin=pred_conf.low, ymax=pred_conf.high, fill=district),
+    alpha=0.2
+  ) +
+  geom_rect(
+    aes(
+      xmin=max(date)+60, xmax=max(date)+90,
+      ymin=mean(greenness, na.rm=TRUE) - (barlength/2),
+      ymax=mean(greenness, na.rm=TRUE) + (barlength/2)
+    ),
+    color="black", fill="gray75"
+  ) +
+  scale_fill_okabe_ito() +
+  scale_color_okabe_ito() +
+  scale_x_date(
+    date_breaks = "year", date_labels = "%Y",
+    limits = as.Date(c("2012-01-01", "2021-12-01"))
+  ) +
+  geom_vline(xintercept = unique(floor_date(df_environ_model$date, "year")),
+             color="gray1", linetype=1, linewidth=0.2)
+
+
+
+  
+p2 <- pred_df |> 
+  ggplot() +
+  geom_line(
+    aes(x=date, y=trend, color=district)
+  ) +
+  geom_ribbon(
+    aes(x=date, ymin=trend_conf.low, ymax=trend_conf.high, fill=district),
+    alpha=0.2
+  ) +
+  geom_rect(
+    aes(
+      xmin=max(date)+60, xmax=max(date)+90,
+      ymin=mean(trend, na.rm=TRUE) - (barlength/2),
+      ymax=mean(trend, na.rm=TRUE) + (barlength/2)
+    ),
+    color="black", fill="gray75"
+  ) +
+  scale_fill_okabe_ito() +
+  scale_color_okabe_ito() +
+  scale_x_date(
+    date_breaks = "year", date_labels = "%Y",
+    limits = as.Date(c("2012-01-01", "2021-12-01"))
+  ) +
+  geom_vline(xintercept = unique(floor_date(df_environ_model$date, "year")),
+             color="gray1", linetype=1, linewidth=0.2)
+
+p3 <- pred_df |> 
+  ggplot() +
+  geom_line(
+    aes(x=date, y=season, color=district)
+  ) +
+  geom_ribbon(
+    aes(x=date, ymin=season_conf.low, ymax=season_conf.high, fill=district),
+    alpha=0.2
+  ) +
+  geom_rect(
+    aes(
+      xmin=max(date)+60, xmax=max(date)+90,
+      ymin=mean(season, na.rm=TRUE) - (barlength/2),
+      ymax=mean(season, na.rm=TRUE) + (barlength/2)
+    ),
+    color="black", fill="gray75"
+  ) +
+  scale_fill_okabe_ito() +
+  scale_color_okabe_ito() +
+  scale_x_date(
+    date_breaks = "year", date_labels = "%Y",
+    limits = as.Date(c("2012-01-01", "2021-12-01"))
+  ) +
+  geom_vline(xintercept = unique(floor_date(df_environ_model$date, "year")),
+             color="gray1", linetype=1, linewidth=0.2)
+
+
+p4 <- pred_df |>
+  ggplot() +
+  geom_segment(
+    aes(x=date, y=0, yend=residuals, color=district),
+    position = position_dodge(width=15)
+  ) +
+  geom_hline(yintercept = 0) +
+  ylab("residuals") +
+  geom_rect(
+    aes(
+      xmin=max(date)+60, xmax=max(date)+90,
+      ymin=mean(residuals, na.rm=TRUE) - (barlength/2),
+      ymax=mean(residuals, na.rm=TRUE) + (barlength/2)
+    ),
+    color="black", fill="gray75"
+  ) +
+  scale_fill_okabe_ito() +
+  scale_color_okabe_ito() +
+  scale_x_date(
+    date_breaks = "year", date_labels = "%Y",
+    limits = as.Date(c("2012-01-01", "2021-12-01"))
+  ) +
+  geom_vline(xintercept = unique(floor_date(df_environ_model$date, "year")),
+             color="gray1", linetype=1, linewidth=0.2)
+
+
+
+p1 / p2 / p3 / p4 + plot_layout(axes = "collect")
+
+
+# Step 6: Make contrasts for the trend
+
+# - Trend change between 2012-01 and 2021-12
+# - Trend difference between Moshi and Siha
+# - Slope of the trend
+
+# -------------------------------------------
+
+# - Trend change between 2012-01 and 2021-12
+
+df_environ_model |> 
+  filter(date %in% c("2012-01-01", "2021-12-01")) |> 
+  pull(time_ind) |> 
+  unique()
+
+
+exclude_set <- c(
+  as.character(glue("ti(month_ind):district{levels(pred_df$district)}")),
+  as.character(glue("ti(time_ind,month_ind):district{levels(pred_df$district)}"))
+)
+
+exclude_set
+
+avg_comparisons(
+  mod,
+  newdata = df_environ_model,
+  variables = list(time_ind = c(1, 120)),
+  by = "district",
+  comparison = "difference",
+  exclude = exclude_set
+) |> 
+  as_tibble() |> 
+  print(width=Inf)
+
+
+plot_comparisons(
+  mod,
+  newdata = df_environ_model,
+  variables = list(time_ind = c(1, 120)),
+  by = "district",
+  comparison = "difference",
+  exclude = exclude_set
+)
+
+
+# - Trend difference between Moshi and Siha
+
+
+comparisons(
+  mod,
+  newdata = df_environ_model,
+  variables = list(district = "reference"),
+  # by = "district",
+  comparison = "difference",
+  exclude = exclude_set
+) |> 
+  as_tibble() |> 
+  # print(width=Inf)
+  ggplot() +
+  geom_line(
+    aes(x=date, y=estimate)
+  ) +
+  geom_ribbon(
+    aes(x=date, ymin=conf.low, ymax=conf.high), alpha=0.2
+  )
+
+plot_comparisons(
+  mod,
+  newdata = df_environ_model,
+  variables = list(district = "reference"),
+  comparison = "difference",
+  exclude = exclude_set,
+  by = c("time_ind")
+)
+
+
+
+# - Slope of the trend
+
+slopes(
+  mod,
+  newdata = df_environ_model,
+  variables = "time_ind",
+  by=c("district", "time_ind"),
+  exclude = exclude_set,
+) |> 
+  as_tibble() |> 
+  ggplot() +
+  geom_line(
+    aes(x=time_ind, y=estimate, color=district)
+  ) +
+  geom_ribbon(
+    aes(x=time_ind, ymin=conf.low, ymax=conf.high, fill=district), alpha=0.2
+  )
+
+plot_slopes(
+  mod,
+  newdata = df_environ_model,
+  exclude = exclude_set,
+  variables = c("time_ind"),
+  by = c("time_ind", "district")
+)
+
+
+
+
+# Step 7: Set up imputed variables
+
+
+
+
+pred_df |> 
+  mutate(
+    imputed = if_else(is.na(greenness), "Yes", "No"),
+  ) |> 
+  ggplot() +
+  geom_point(
+    aes(x=date, y=pred, color=district, shape=imputed, size=imputed),
+  ) +
+  geom_line(
+    aes(x=date, y=pred, color=district)
+  ) +
+  scale_shape_manual(
+    values = c(16,4)
+  ) +
+  scale_size_manual(
+    values = c(2.5,8)
+  ) +
+  scale_x_date(
+    date_breaks = "year", date_labels = "%Y",
+    limits = as.Date(c("2012-01-01", "2021-12-01"))
+  ) +
+  geom_vline(xintercept = unique(floor_date(df_environ_model$date, "year")),
+             color="gray1", linetype=1, linewidth=0.2)
+
+
+
+
+
+
+```
+
+
+```{r}
+#| eval: false
+
+library(mgcv)
+library(gratia)
+library(marginaleffects)
+library(patchwork)
+
+# Prepare data for modelling
+df_environ_model <- df_environ
+
+df_environ_model <- df_environ_model |> 
+  mutate(
+    time_ind = interval(min(date), date) / months(1) + 1,
+    year_ind = year(date) - min(year(date)) + 1,
+    month_ind = month(date),
+    district = factor(district, levels=c("Moshi", "Siha"))
+  )
+
+# DF to save the forecasts
+df_environ_impute <- df_environ_model
+
+
+
+# greenness
+
+
+# Separate for Moshi and Siha
+
+df_environ_model_siha <- filter(df_environ_model, district=="Siha")
+
+df_environ_impute_siha <- df_environ_model_siha
+
+
+# Step 1: Plot the response
+
+# df_environ_model_siha |> 
+df_environ_model |> 
+  ggplot() +
+  geom_line(
+    aes(x=date, y=greenness, color=district)
+  ) +
+  geom_point(
+    aes(x=date, y=greenness, color=district)
+  ) +
+  scale_x_date(date_breaks="year", date_labels = "%Y",
+               limits=as.Date(c("2012-01-01", "2022-01-01"))) +
+  geom_vline(xintercept = unique(floor_date(df_environ_model_siha$date, "year")),
+             color="gray1", linetype=2, linewidth=0.8)
+
+
+# Step 2: Fit the model
+
+mod <- gam(
+  # greenness ~ s(time_ind, bs="cr", k=10) + te(year_ind, month_ind, bs=c("cr", "cc"), k=c(10,12)),
+  # greenness ~ s(time_ind, bs="cr", k=10) + te(year_ind, month_ind, bs=c("cr", "cc"), k=c(3,12)),
+  # greenness ~ s(time_ind, bs="cr", k=10) + s(month_ind, bs=c("cc"), k=c(12)),
+  greenness ~ ti(time_ind, bs="cr", k=10) + ti(month_ind, bs="cc", k=12) + 
+    ti(time_ind, month_ind, bs=c("cr", "cc"), k=c(10,12)),
+  # greenness ~ s(time_ind, bs="cr", k=10) + s(month_ind, bs=c("cc"), k=c(12)),
+  data=df_environ_model_siha,
+  family = gaussian(),
+  method = "REML",
+  knots = list(month_ind = c(0,12))
+  )
+
+mod <- gam(
+  greenness ~ district + ti(time_ind, bs="cr", k=10, by=district) + ti(month_ind, bs="cc", k=12, by=district) + 
+    ti(time_ind, month_ind, bs=c("cr", "cc"), k=c(10,12), by=district),
+  data=df_environ_model,
+  family = gaussian(),
+  method = "REML",
+  knots = list(month_ind = c(0,12))
+  )
+
+
+
+# Step 3: Check the model
+
+mod
+summary(mod)
+
+gratia::appraise(mod)
+
+mod |> draw()
+
+# Step 4: Get predictions, as well as decomposition into trend, seasonal and residual
+
+
+# ###########################
+# Check uncertainty vignette
+# ###########################
+
+# pred_df <- df_environ_model_siha
+pred_df <- df_environ_model
+
+# Get predictions for the response
+
+pred_name <- "pred"
+
+pred_df_sub <- predictions(
+  mod,
+  newdata = df_environ_model
+) |> 
+  as_tibble() |> 
+  select(time_ind, district, estimate, conf.low, conf.high) |> 
+  rename(
+    "{pred_name}" := estimate,
+    "{pred_name}_conf.low" := conf.low,
+    "{pred_name}_conf.high" := conf.high,
+  )
+
+
+pred_df <- pred_df |> 
+  left_join(pred_df_sub)
+
+# Predictions for trend
+
+pred_name <- "trend"
+
+mod
+summary(mod)
+
+
+predict(mod, type="response", newdata=df_environ_model,
+        exclude=c("pepe"))
+
+pred_df_sub <- predictions(
+  mod,
+  newdata = df_environ_model,
+  exclude = c("ti(month_ind)", "ti(time_ind,month_ind)")
+) |> 
+  as_tibble() |> 
+  select(time_ind, district, estimate, conf.low, conf.high) |> 
+  rename(
+    "{pred_name}" := estimate,
+    "{pred_name}_conf.low" := conf.low,
+    "{pred_name}_conf.high" := conf.high,
+  )
+
+pred_df <- pred_df |> 
+  left_join(pred_df_sub)
+
+# Predictions for seasonality
+
+pred_name <- "season"
+
+pred_df_sub <- predictions(
+  mod,
+  newdata = df_environ_model,
+  exclude = c("ti(time_ind)", "(Intercept)")
+) |> 
+  as_tibble() |> 
+  select(time_ind, district, estimate, conf.low, conf.high) |> 
+  rename(
+    "{pred_name}" := estimate,
+    "{pred_name}_conf.low" := conf.low,
+    "{pred_name}_conf.high" := conf.high,
+  )
+
+pred_df <- pred_df |> 
+  left_join(pred_df_sub)
+
+
+# Add residuals
+mod$residuals
+
+pred_df <- pred_df |> 
+  left_join(cbind(mod$model, residuals = mod$residuals))
+
+
+pred_df |> 
+  print(width=Inf)
+
+
+# Step 5: Plot time series decomposition
+
+
+
+
+
+barlength <- select(pred_df, c(greenness, pred:residuals)) |> 
+  sapply(\(x) diff(range(x, na.rm=TRUE))) |> 
+  min()
+
+pred_df |> 
+  ggplot() +
+  geom_point(
+    aes(x=date, y=greenness, color=district)
+  ) +
+  geom_line(
+    aes(x=date, y=greenness, color=district)
+  ) +
+  geom_rect(
+    aes(
+      xmin=max(date)+60, xmax=max(date)+90,
+      ymin=mean(greenness, na.rm=TRUE) - (barlength/2),
+      ymax=mean(greenness, na.rm=TRUE) + (barlength/2)
+    ),
+    color="black", fill="gray75"
+  )
+
+p1 <- pred_df |> 
+  ggplot() +
+  geom_point(
+    aes(x=date, y=greenness, color=district)
+  ) +
+  geom_line(
+    aes(x=date, y=pred, color=district)
+  ) +
+  geom_ribbon(
+    aes(x=date, ymin=pred_conf.low, ymax=pred_conf.high, fill=district),
+    alpha=0.2
+  ) +
+  geom_rect(
+    aes(
+      xmin=max(date)+60, xmax=max(date)+90,
+      ymin=mean(greenness, na.rm=TRUE) - (barlength/2),
+      ymax=mean(greenness, na.rm=TRUE) + (barlength/2)
+    ),
+    color="black", fill="gray75"
+  )
+
+
+
+  
+p2 <- pred_df |> 
+  ggplot() +
+  geom_line(
+    aes(x=date, y=trend, color=district)
+  ) +
+  geom_ribbon(
+    aes(x=date, ymin=trend_conf.low, ymax=trend_conf.high, fill=district),
+    alpha=0.2
+  ) +
+  geom_rect(
+    aes(
+      xmin=max(date)+60, xmax=max(date)+90,
+      ymin=mean(trend, na.rm=TRUE) - (barlength/2),
+      ymax=mean(trend, na.rm=TRUE) + (barlength/2)
+    ),
+    color="black", fill="gray75"
+  )
+
+p3 <- pred_df |> 
+  ggplot() +
+  geom_line(
+    aes(x=date, y=season, color=district)
+  ) +
+  geom_ribbon(
+    aes(x=date, ymin=season_conf.low, ymax=season_conf.high, fill=district),
+    alpha=0.2
+  ) +
+  geom_rect(
+    aes(
+      xmin=max(date)+60, xmax=max(date)+90,
+      ymin=mean(season, na.rm=TRUE) - (barlength/2),
+      ymax=mean(season, na.rm=TRUE) + (barlength/2)
+    ),
+    color="black", fill="gray75"
+  )
+
+
+p4 <- pred_df |> 
+  ggplot() +
+  geom_segment(
+    aes(x=date, y=0, yend=residuals, color=district)
+  ) +
+  ylab("residuals") +
+  geom_rect(
+    aes(
+      xmin=max(date)+60, xmax=max(date)+90,
+      ymin=mean(residuals, na.rm=TRUE) - (barlength/2),
+      ymax=mean(residuals, na.rm=TRUE) + (barlength/2)
+    ),
+    color="black", fill="gray75"
+  )
+
+
+
+p1 / p2 / p3 / p4 + plot_layout(axes = "collect")
+
+
+
+
+# Step 6: Make contrasts for the trend
+
+# - Trend change between 2012-01 and 2021-12
+# - Trend difference between Moshi and Siha
+# - Slope of the trend
+
+# -------------------------------------------
+
+# - Trend change between 2012-01 and 2021-12
+
+df_environ_model_siha |> 
+  filter(date %in% c("2012-01-01", "2021-12-01")) |> 
+  pull(time_ind) |> 
+  unique()
+
+avg_comparisons(
+  mod,
+  newdata = df_environ_model_siha,
+  variables = list(time_ind = c(1, 120)),
+  comparison = "difference",
+  exclude = c("ti(month_ind)", "ti(time_ind,month_ind)")
+) |> 
+  as_tibble()
+
+
+avg_comparisons(
+  mod,
+  newdata = df_environ_model_siha,
+  variables = list(time_ind = c(1, 120)),
+  comparison = "lift",
+  exclude = c("ti(month_ind)", "ti(time_ind,month_ind)")
+) |> 
+  as_tibble()
+
+
+# - Trend difference between Moshi and Siha
+
+
+
+# - Slope of the trend
+
+
+
+
+
+# Step 7: Set up imputed variables
+
+
+
+
+
+
+
+# ----------------------------------------------------------------------------------------
+```
+
+
+```{r}
+#| eval: false
+
+predictions(
+  mod,
+  newdata = df_environ_model_siha,
+  # exclude = "ti(month_ind)"
+  ) |> 
+  as_tibble() |> 
+  print(width=Inf, n=20)
+
+plot_predictions(
+  mod,
+  newdata = df_environ_model_siha,
+  by="time_ind",
+  exclude = c("ti(month_ind)", "ti(time_ind,month_ind)")
+) / p2
+
+plot_predictions(
+  mod,
+  newdata = df_environ_model_siha,
+  by="time_ind",
+  exclude = c("ti(time_ind)", "(Intercept)")
+) / p3
+
+
+
+
+
+avg_comparisons(
+  mod,
+  newdata = df_environ_model_siha,
+  variables = list(time_ind = c(1, 120)),
+  comparison = "lift",
+  exclude = c("ti(month_ind)", "ti(time_ind,month_ind)")
+) |> 
+  as_tibble() |> 
+  print(n=20, width=Inf)
+
+predict(mod, type="response", newdata = df_environ_model_siha, exclude = "ti(month_ind)", se.fit = TRUE)
+
+# Save predicted greenness
+df_environ_impute_siha <- bind_cols(
+  df_environ_impute_siha,
+  greenness_imp = predict(mod, type="response", newdata = df_environ_model_siha)
+)
+
+# Visualize imputation
+df_environ_impute_siha |> 
+  mutate(
+    imputed = if_else(is.na(greenness), "Yes", "No")
+  ) |> 
+  ggplot() +
+  geom_point(
+    aes(x=date, y=greenness_imp, color=district, shape=imputed), size=2.5
+  ) +
+  geom_line(
+    aes(x=date, y=greenness_imp, color=district)
+  ) +
+  scale_shape_manual(
+    values = c(16,4)
+  ) +
+  scale_x_date(date_breaks="year", date_labels = "%Y",
+               limits=as.Date(c("2012-01-01", "2021-12-01"))) +
+  geom_vline(xintercept = unique(floor_date(df_environ_model_siha$date, "year")),
+             color="gray1", linetype=2, linewidth=0.8)
+
+
+# Step 4: Get predictions for missings and forecasts up to 2021 (inclusive)
+
+# Step 5: Get predictions for trend and seasonal
+
+mod |> draw()
+
+pred_terms <- predict(mod, newdata=df_environ_model_siha, type="terms", se.fit = TRUE)
+pred_fit <- predict(mod, newdata=df_environ_model_siha, type="response", se.fit = TRUE)
+
+
+pred_df <- df_environ_model_siha |> 
+  mutate(
+    pred = with(pred_fit, fit),
+    pred_high = with(pred_fit, fit + qnorm(0.975)*se.fit),
+    pred_low = with(pred_fit, fit + qnorm(0.025)*se.fit),
+    trend = with(pred_terms, fit[,1] + attr(pred_terms, "constant")),
+    trend_high = with(pred_terms, fit[,1] + qnorm(0.975)*se.fit[,1] + attr(pred_terms, "constant")),
+    trend_low = with(pred_terms, fit[,1] + qnorm(0.025)*se.fit[,1] + attr(pred_terms, "constant")),
+    # season = with(pred_terms, fit[,2] + fit[,3] + attr(pred_terms, "constant")),
+    season = with(pred_terms, fit[,2] + fit[,3]),
+    # season_high = with(pred_terms, fit[,2] + qnorm(0.975)*se.fit[,2] + 
+    #                      fit[,3] + qnorm(0.975)*se.fit[,3] +
+    #                      attr(pred_terms, "constant")),
+    season_high = with(pred_terms, fit[,2] + qnorm(0.975)*se.fit[,2] + 
+                         fit[,3] + qnorm(0.975)*se.fit[,3]),
+    # season_low = with(pred_terms, fit[,2] + qnorm(0.025)*se.fit[,2] +
+    #                     fit[,3] + qnorm(0.025)*se.fit[,3] + 
+    #                     attr(pred_terms, "constant"))
+    season_low = with(pred_terms, fit[,2] + qnorm(0.025)*se.fit[,2] +
+                        fit[,3] + qnorm(0.025)*se.fit[,3])
+  )
+
+
+# Add residuals
+pred_df <- pred_df |> 
+  left_join(cbind(mod$model, residuals = mod$residuals))
+
+
+barlength <- select(pred_df, c(greenness, pred:residuals)) |> 
+  sapply(\(x) diff(range(x, na.rm=TRUE))) |> 
+  min()
+
+pred_df |> 
+  ggplot() +
+  geom_point(
+    aes(x=date, y=greenness)
+  ) +
+  geom_line(
+    aes(x=date, y=greenness)
+  ) +
+  geom_rect(
+    aes(
+      xmin=max(date)+60, xmax=max(date)+90,
+      ymin=mean(greenness, na.rm=TRUE) - (barlength/2),
+      ymax=mean(greenness, na.rm=TRUE) + (barlength/2)
+    ),
+    color="black", fill="gray75"
+  )
+
+p1 <- pred_df |> 
+  ggplot() +
+  geom_point(
+    aes(x=date, y=greenness)
+  ) +
+  geom_line(
+    aes(x=date, y=pred)
+  ) +
+  geom_ribbon(
+    aes(x=date, ymin=pred_low, ymax=pred_high),
+    alpha=0.2
+  ) +
+  geom_rect(
+    aes(
+      xmin=max(date)+60, xmax=max(date)+90,
+      ymin=mean(greenness, na.rm=TRUE) - (barlength/2),
+      ymax=mean(greenness, na.rm=TRUE) + (barlength/2)
+    ),
+    color="black", fill="gray75"
+  )
+
+
+
+  
+p2 <- pred_df |> 
+  ggplot() +
+  geom_line(
+    aes(x=date, y=trend)
+  ) +
+  geom_ribbon(
+    aes(x=date, ymin=trend_low, ymax=trend_high),
+    alpha=0.2
+  ) +
+  geom_rect(
+    aes(
+      xmin=max(date)+60, xmax=max(date)+90,
+      ymin=mean(trend, na.rm=TRUE) - (barlength/2),
+      ymax=mean(trend, na.rm=TRUE) + (barlength/2)
+    ),
+    color="black", fill="gray75"
+  )
+
+p3 <- pred_df |> 
+  ggplot() +
+  geom_line(
+    aes(x=date, y=season)
+  ) +
+  geom_ribbon(
+    aes(x=date, ymin=season_low, ymax=season_high),
+    alpha=0.2
+  ) +
+  geom_rect(
+    aes(
+      xmin=max(date)+60, xmax=max(date)+90,
+      ymin=mean(season, na.rm=TRUE) - (barlength/2),
+      ymax=mean(season, na.rm=TRUE) + (barlength/2)
+    ),
+    color="black", fill="gray75"
+  )
+
+
+p4 <- pred_df |> 
+  ggplot() +
+  geom_segment(
+    aes(x=date, y=0, yend=residuals)
+  ) +
+  ylab("residuals") +
+  geom_rect(
+    aes(
+      xmin=max(date)+60, xmax=max(date)+90,
+      ymin=mean(residuals, na.rm=TRUE) - (barlength/2),
+      ymax=mean(residuals, na.rm=TRUE) + (barlength/2)
+    ),
+    color="black", fill="gray75"
+  )
+
+
+
+p1 / p2 / p3 / p4 + plot_layout(axes = "collect")
+
+
+mod |> draw()
+
+# ---
+# marginaleffects
+
+
+plot_predictions(
+  mod,
+  # condition = "time_ind",
+  by = "time_ind"
+)
+
+predictions(
+  mod,
+  # by = "time_ind",
+  # variables = "time_ind",
+  newdata = datagrid(
+    newdata = df_environ_model_siha
+  )
+) |> 
+  as_tibble() |> 
+  print(width=Inf)
+
+
+
+predictions(
+  mod,
+  newdata = df_environ_model_siha
+) |> 
+  as_tibble() |> 
+  dim()
+
+predictions(
+  mod,
+  # by = "time_ind",
+  # variables = "time_ind",
+  newdata = datagrid(
+    newdata = df_environ_model_siha,
+  #   grid_type = "balanced"
+  grid_type = "counterfactual",
+  month_ind = 0
+  # time_ind = unique
+  )
+) |> 
+  as_tibble() |> 
+  # dim()
+  print(width=Inf,
+        n=Inf)
+
+
+plot_predictions(
+  mod,
+  by = "time_ind",
+  newdata = datagrid(
+    newdata=df_environ_model_siha,
+    grid_type = "counterfactual",
+    month_ind = 1
+  )
+)
+
+
+
+plot_predictions(
+  mod,
+  # by = "time_ind",
+  condition = "month_ind",
+  # newdata = datagrid(
+    # newdata=df_environ_model_siha
+    # grid_type = "counterfactual",
+    # month_ind = 1
+  # )
+)
+
+
+# Predictions at specified values
+predictions(
+  mod,
+  newdata = df_environ_model_siha
+) |> 
+  as_tibble() |> 
+  print(width=Inf)
+
+# Equivalent, predictions averaged at every 'time_ind', which is unique
+plot_predictions(
+  mod,
+  newdata = df_environ_model_siha,
+  by = "time_ind"
+)
+
+# Predictions for the trend
+# Predicitons for every time_ind, when month_ind = 0
+
+predictions(
+  mod,
+  newdata = datagrid(
+    newdata = df_environ_model_siha,
+    grid_type = "counterfactual",
+    month_ind = 0
+  )
+) |> 
+  as_tibble() |> 
+  print(width=Inf, n=20)
+
+plot_predictions(
+  mod,
+  newdata = datagrid(
+    newdata = df_environ_model_siha,
+    grid_type = "counterfactual",
+    month_ind = 6.5
+  ),
+  by="time_ind",
+  # type="link"
+) / p2
+
+
+summary(mod)
+
+predictions(
+  mod,
+  newdata = df_environ_model_siha,
+  exclude = "ti(month_ind)"
+  ) |> 
+  as_tibble() |> 
+  print(width=Inf, n=20)
+
+plot_predictions(
+  mod,
+  newdata = df_environ_model_siha,
+  by="time_ind",
+  exclude = c("ti(month_ind)", "ti(time_ind,month_ind)")
+) / p2
+
+plot_predictions(
+  mod,
+  newdata = df_environ_model_siha,
+  by="time_ind",
+  exclude = c("ti(time_ind)", "(Intercept)")
+) / p3
+
+
+
+avg_comparisons(
+  mod,
+  newdata = df_environ_model_siha,
+  variables = list(time_ind = c(1, 120)),
+  comparison = "lift",
+  exclude = c("ti(month_ind)", "ti(time_ind,month_ind)")
+) |> 
+  as_tibble() |> 
+  print(n=20, width=Inf)
+
+
+
+
+
+
+
+
+
+
+
+
+
+slopes(
+  mod,
+  variables = "time_ind",
+  newdata = df_environ_model_siha
+)
+
+plot_slopes(
+  mod,
+  newdata = df_environ_model_siha,
+  variables = "time_ind",
+  by = "time_ind"
+)
+
+plot_slopes(
+  mod,
+  newdata = df_environ_model_siha,
+  variables = "month_ind",
+  condition = "time_ind"
+)
+
+
+# ---
+
+
+trend_2012 <-pred_df |> 
+  filter(date=="2012-01-01") |> 
+  pull(trend)
+
+trend_2022 <-pred_df |> 
+  filter(date=="2021-12-01") |> 
+  pull(trend)
+
+trend_2022 - trend_2012
+((trend_2022 - trend_2012) / trend_2012)*100
+
+Xp <- predict(mod, type="lpmatrix", newdata = df_environ_model_siha)
+
+
+
+(Xp %*% vcov(mod)) |> dim()
+
+sqrt(rowSums((Xp %*% vcov(mod)) * Xp))
+
+predict(mod, type="response", newdata = df_environ_model_siha, se.fit = TRUE)$se.fit
+
+df.residual(mod)
+
+qt(0.975, df.residual(mod))
+
+df_environ_model_siha |> select(date, time_ind) |> print(n=Inf)
+
+tmp <- comparisons(mod,
+            newdata = df_environ_model_siha,
+            # variables = list(date = c("2012-01-01", "2021-12-01")),
+            variables = list(time_ind = c(1, 120)),
+            comparison="difference"
+            )
+
+avg_comparisons(mod,
+            newdata = df_environ_model_siha,
+            # variables = list(date = c("2012-01-01", "2021-12-01")),
+            variables = list(time_ind = c(1, 120)),
+            # comparison="difference"
+            comparison="lift"
+            )
+
+
+tmp |> as.data.frame()
+
+vcov(mod) |> dim()
+
+pred_df[which(pred_df$date=="2012-01-01"), "trend"]
+which(pred_df$date=="2021-12-01")
+
+
+pred_df |> 
+  ggplot() +
+  geom_line(
+    aes(x=date, y=greenness), color="red"
+  ) +
+  geom_line(
+    aes(x=date, y=pred), color="blue"
+  ) +
+  geom_line(
+    aes(x=date, y=trend+season), color="yellow"
+  )
+
+
+
+
+p4 <- dat |> 
+  ggplot() +
+  geom_hline(
+    yintercept = 0, linetype=2
+  ) +
+  geom_line(
+    aes(x=time_ind, y=resid)
+  ) +
+  # geom_segment(
+  #   aes(x=time_ind, xend=time_ind, y=0, yend=resid)
+  # ) +
+  geom_rect(
+    data=barpos["resid", ],
+    aes(
+      xmin = left, xmax = right, ymax = top, ymin = bottom, group = y_name
+    ),
+    fill = "gray75", colour = "black", size = 1 / 3
+  ) +
+  labs(
+    # title="residual"
+    )
+
+
+pred_df |> 
+  ggplot() +
+  geom_point(
+    aes(x=date, y=greenness), color="red"
+  ) +
+  geom_point(
+    aes(x=date, y=pred), color="blue"
+  ) +
+  # geom_ribbon(
+  #   aes(x=date, ymin=pred_low, ymax=pred_high), alpha=0.2, fill="blue"
+  # ) +
+  geom_point(
+    aes(x=date, y=trend)
+  ) +
+  geom_ribbon(
+    aes(x=date, ymin=trend_low, ymax=trend_high), alpha=0.2
+  ) +
+  geom_point(
+    aes(x=date, y=season), color="yellow"
+  ) +
+  geom_ribbon(
+    aes(x=date, ymin=season_low, ymax=season_high), alpha=0.2, fill="yellow"
+  )
+   
+  # geom_line(
+  #   aes(x=date, y=greenness), color="red"
+  # )
+
+
+
+
+
+
+
+
+
+
+
+
+
+# -------
+
+# Step 1: Plot the response
+
+df_environ_model |> 
+  ggplot() +
+  geom_line(
+    aes(x=date, y=greenness, color=district)
+  ) +
+  geom_point(
+    aes(x=date, y=greenness, color=district)
+  ) +
+  scale_x_date(date_breaks="year", date_labels = "%Y",
+               limits=as.Date(c("2012-01-01", "2022-01-01"))) +
+  geom_vline(xintercept = unique(floor_date(df_environ_model$date, "year")),
+             color="gray1", linetype=2, linewidth=0.8)
+
+
+# Step 2: Fit the model
+
+# mod <- gam(
+#   greenness ~ district + te(time_ind, month_ind,
+#                              bs=c("cr", "cc"), k=c(10,12), by=district),
+#   data=df_environ_model,
+#   family = gaussian(),
+#   method = "REML",
+#   knots = list(month_ind = c(0,12))
+#   )
+
+mod <- gam(
+  greenness ~ district + s(time_ind, bs="cr", k=10, by=district) +
+    te(year_ind, month_ind,
+       bs=c("cr", "cc"), k=c(10,12), by=district),
+  data=df_environ_model,
+  family = gaussian(),
+  method = "REML",
+  knots = list(month_ind = c(0,12))
+  )
+
+# Step 3: Check the model
+
+mod
+summary(mod)
+
+gratia::appraise(mod)
+
+# Step 4: Get predictions for missings and forecasts up to 2021 (inclusive)
+
+# Save predicted greenness
+df_environ_impute <- bind_cols(
+  df_environ_impute,
+  greenness_imp = predict(mod, type="response", newdata = df_environ_model)
+)
+
+# Visualize imputation
+df_environ_impute |> 
+  mutate(
+    imputed = if_else(is.na(greenness), "Yes", "No")
+  ) |> 
+  ggplot() +
+  geom_point(
+    aes(x=date, y=greenness_imp, color=district, shape=imputed), size=2.5
+  ) +
+  geom_line(
+    aes(x=date, y=greenness_imp, color=district)
+  ) +
+  scale_shape_manual(
+    values = c(16,4)
+  ) +
+  scale_x_date(date_breaks="year", date_labels = "%Y",
+               limits=as.Date(c("2012-01-01", "2021-12-01"))) +
+  geom_vline(xintercept = unique(floor_date(df_environ_model$date, "year")),
+             color="gray1", linetype=2, linewidth=0.8)
+
+
+# Step 5: Get predictions for trend and seasonal
+
+pred_terms <- predict(mod, newdata=df_environ_model, type="terms", se.fit = TRUE)
+
+pred_fit <- predict(mod, newdata=df_environ_model, type="response", se.fit = TRUE)
+
+
+pred_terms$fit[, "s(time_ind):districtSiha"]
+
+pred_terms$fit
+pred_terms$se.fit |> dim()
+pred_terms$se.fit |> dim()
+
+smooth_name <- "s(time_ind):districtMoshi"
+
+data.frame(
+  estimate = with(pred_terms, fit[, smooth_name]),
+  ci_high = with(pred_terms, fit[, smooth_name] + qnorm(0.975)*se.fit[, smooth_name]),
+  ci_low = with(pred_terms, fit[, smooth_name] + qnorm(0.025)*se.fit[, smooth_name])
+)
+
+with(pred_terms, fit[, smooth_name] + qnorm(0.025)*se.fit[, smooth_name])
+with(pred_terms, fit[, smooth_name] + qnorm(0.975)*se.fit[, smooth_name])
+
+
+pred_terms$fit[, smooth_name]
+pred_terms$se.fit[, smooth_name]
+
+
+for (i in 1:ncol(pred_terms$fit)) {
+  print(colnames(pred_terms$fit)[i])
+  # pred_terms$fit[,i]
+  # print(i)
+}
+
+map2(pred_terms$fit[,1], pred_terms$se.fit[,1], \(x,y)x*y)
+
+sapply(pred_terms$fit, function(x) {
+  
+})
+
+pred <- predict(mod, type="terms", se.fit = TRUE)
+pred2 <- predict(mod, type="response", se.fit = TRUE)
+
+
+
+
+dat <- transform(mod$model,
+          trend_siha = pred$fit[, "s(time_ind):districtSiha"],
+          trend_moshi = pred$fit[, "s(time_ind):districtMoshi"],
+          seasonal_siha = pred$fit[, "te(year_ind,month_ind):districtSiha"],
+          seasonal_moshi = pred$fit[, "te(year_ind,month_ind):districtMoshi"],
+          resid = mod$residuals,
+          fitted = pred2$fit
+          )
+
+dat |> dim()
+
+pred2[[1]] |> dim()
+
+dat |> 
+  ggplot() +
+  geom_line(
+    aes(x=time_ind, y=trend_moshi + attr(pred, "constant") + pred$fit[, "district"], color=district)
+  ) +
+  geom_line(
+    aes(x=time_ind, y=seasonal_moshi + attr(pred, "constant") + pred$fit[, "district"], color=district)
+  ) +
+  geom_point(
+    aes(x=time_ind, y=greenness, color=district)
+  )
+
+dat |> 
+  ggplot() +
+  geom_line(
+    aes(x=time_ind, y=(seasonal + attr(pred, "constant")) |> exp()*1e5), color="blue"
+  ) +
+  geom_line(
+    aes(x=time_ind, y=(trend + attr(pred, "constant")) |> exp()*1e5)
+  ) +
+  geom_line(
+    aes(x=time_ind, y=(resid + attr(pred, "constant")) |> exp()*1e5), color="red"
+  ) +
+  geom_line(
+    aes(x=time_ind, y = exp(seasonal+trend+resid + attr(pred, "constant"))*1e5), color="green"
+  ) +
+  geom_line(
+    aes(x=time_ind, y=fitted*1e5), color="yellow"
+  ) +
+  geom_line(
+    aes(x=time_ind, y=n_cases/population*1e5), color="orange"
+  ) +
+  geom_line(
+    aes(x=time_ind, y = exp(seasonal+trend + attr(pred, "constant"))*1e5), color="purple"
+  )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+pred_fit <- predictions(mod, type="response",
+                        newdata = df_environ_model
+                        ) |> 
+  as_tibble()
+
+
+pred_trend <- predictions(mod, type="response",
+                        newdata = mutate(df_environ_model, month_ind=0)
+                        ) |> 
+  as_tibble()
+
+
+pred_season <- pred_fit |> 
+  mutate(
+    estimate = estimate - pred_trend$estimate,
+    conf.low = conf.low - pred_trend$conf.low,
+    conf.high = conf.high - pred_trend$conf.high
+  )
+
+coef(mod)
+
+confint(mod, parm = "te(year_ind,month_ind):districtSiha", type="confidence") |> 
+  ggplot() +
+  geom_line(
+    aes(x=year_ind+month_ind, y=.estimate)
+  )
+"s(time_ind):districtSiha"
+
+mod |> draw()
+
+# pred_trend <- predictions(mod, type="response",
+#                         newdata = datagrid(newdata=df_environ_model,
+#                                            district = unique,
+#                                            time_ind = unique,
+#                                            month_ind = 0
+#                                            )
+#                         ) |> 
+#   as_tibble()
+# 
+# pred_trend |> 
+#   left_join(select(pred_fit, time_ind, date), join_by(time_ind))
+
+
+
+
+pred_fit |> 
+  # filter(year(date)<2022) |> 
+  ggplot() +
+  # geom_point(
+  #   aes(x=date, y=greenness, color=district)
+  # ) +
+  # geom_line(
+  #   aes(x=date, y=greenness, color=district)
+  # ) +
+  # geom_line(
+  #   aes(x=date, y=estimate, color=district), linewidth=1
+  # ) +
+  # geom_ribbon(
+  #   aes(x=date, ymin=conf.low, ymax=conf.high, fill=district), alpha=0.2
+  # ) +
+  geom_line(
+    data=pred_trend,
+    aes(x=date, y=estimate, color=district), linewidth=1
+  ) +
+  geom_ribbon(
+    data=pred_trend,
+    aes(x=date, ymin=conf.low, ymax=conf.high, fill=district), alpha=0.2
+  ) +
+  geom_line(
+    data=pred_season,
+    aes(x=date, y=estimate, color=district), linewidth=1
+  ) +
+  geom_ribbon(
+    data=pred_season,
+    aes(x=date, ymin=conf.low, ymax=conf.high, fill=district), alpha=0.2
+  ) +
+  scale_x_date(date_breaks="year", date_labels = "%Y",
+               limits=as.Date(c("2012-01-01", "2021-12-01")))
+
+
+# plot_predictions(mod, by=c("time_ind", "district"))
+
+
+mod |> str()
+
+expand_grid(df_environ_model, z=1:2)
+
+pred_fit |> as_tibble()
+
+# pred_fit |>
+pred_season |> 
+  as_tibble() |> 
+  ggplot() +
+  geom_point(
+    aes(x=time_ind, y=estimate, color=district)
+  ) +
+  geom_line(
+    aes(x=time_ind, y=estimate, color=district)
+  )
+
+pred_fit |> pull(estimate)
+mod$fitted.values
+
+plot_predictions(mod, by=c("time_ind", "district"),
+                 points=1)
+
+
+
+pred_fit |> as_tibble() |> 
+  print(n=Inf)
+
+pred_fit |> 
+  as_tibble() |> 
+  full_join(df_environ_model) |> 
+  # print(n=Inf)
+  ggplot() +
+  geom_line(
+    aes(x=date, y=estimate, color=district)
+  )
+
+avg_predictions(mod, type="response", by=c())
+
+broom::tidy(mod)
+
+pred <- predictions(mod, type="response") |> pull(estimate)
+
+pred_trend <- predictions(
+  mod,
+  newdata = datagrid(model=mod,
+                     time_ind=unique,
+                     # month_ind=0
+                     month_ind=6.5
+                     )
+) |> 
+  pull(estimate)
+
+pred_season <- pred - pred_trend
+
+dat <- data.frame(
+  mod$model,
+  pred,
+  pred_trend,
+  pred_season,
+  resid = mod$residuals
+)
+
+dat |> colnames()
+
+dat |> 
+  pivot_longer(
+    cols = c(pm2p5, pred_trend, pred_season, resid),
+    values_to = "y",
+    names_to = "y_name"
+  ) |> 
+  mutate(
+    y_name = factor(y_name, levels=c("pm2p5", "pred_trend", "pred_season", "resid"))
+  ) |> 
+  ggplot() +
+  geom_line(
+    aes(x=time_ind, y=y)
+  ) +
+  facet_grid(
+    "y_name ~ .",
+    # switch = "y",
+    scales = "free_y"
+    
+  )
+
+
+
+# Step 5: Plot time series decomposition
+
+
+# plot_predictions(mod, by=c("time_ind", "district"), month_ind = 0)
+
+
+# pm2p5
+
+# total_rainfall
+
+# n_raindays
+
+# temp_min
+
+# temp_mean
+
+# temp_max
+
+# utci
+
+
+
+
+```
+
+
+```{r}
+#| eval: false
+
+library(mgcv)
+library(gratia)
+library(marginaleffects)
+
+# Read Gavin Simpson thing for tips on knots for smooths
+
+# Fit trend + seasonal + residual and impute
+
+# Dataframe to store imputed data
+df_environ_impute <- df_environ
+df_environ_model <- df_environ
+
+
+# 10 df per year
+# 4 df for season, per year
+
+df_environ_model <- df_environ_model |> 
+  mutate(
+    time_ind = interval(min(date), date) / months(1) + 1,
+    month_ind = month(date),
+    district = factor(district)
+  )
+
+df_environ_model |> 
+  ggplot() +
+  geom_line(
+    aes(
+      # x=date, y=total_rainfall, color=district
+      x=date, y=log1p(total_rainfall), color=district
+      )
+  )
+
+df_environ_model$date |> year() |> range() |> diff()
+
+df_environ_model$total_rainfall |> log1p() |> hist(breaks=30)
+df_environ_model$total_rainfall |> hist(breaks=30)
+# 1 df per year
+
+# REML preferred for reasons outlined in Wood (2011)
+# Define start and end points for the cyclic spline (they will have the same value)
+# we do not want January (1) and December (12) to have the same values, we want
+# Decembers (0 and 12) to match
+
+mod <- gam(
+  log1p(total_rainfall) ~ district + te(time_ind, month_ind,
+                             bs=c("cr", "cc"), k=c(10,12), by=district),
+  data=df_environ_model,
+  family = gaussian(),
+  method = "REML",
+  knots = list(month_ind = c(0,12))
+  )
+
+# mod <- gam(
+#   (total_rainfall+1) ~ district + te(time_ind, month_ind,
+#                              bs=c("cr", "cc"), k=c(10,12), by=district),
+#   data=df_environ_model,
+#   family = Gamma(link="log"),
+#   method = "REML",
+#   knots = list(month_ind = c(0,12))
+#   )
+
+
+mod$smooth[[1]]$margin[[1]]$xp
+
+mod$smooth[[1]]$margin[[2]]$xp
+
+
+mod$smooth |> str()
+
+mod |> summary()
+mod |> draw()
+model.matrix(mod)
+coef(mod)
+
+model.matrix(mod) %*% coef(mod)
+
+matplot(model.matrix(mod)[,-c(1:2)], type="l")
+
+
+k.check(mod)
+
+mod$model
+
+# Attempt to plot splines
+# cbind(mod$model, model.matrix(mod)) |> 
+#   ggplot() +
+#   geom_line(
+#     aes(x=time_ind, y=`te(time_ind,month_ind):districtMoshi.1`)
+#   )
+
+vcov(mod) |> dim()
+
+(mod$fitted.values |> exp()) -1
+
+(exp(mod$fitted.values) - 1) |> 
+  sapply(\(x) ifelse(x<0,0,x))
+  map_at(\(x) x<0, 0) |> 
+  unlist()
+
+if_else(tmp < 0, 0, tmp)
+
+mod2 <- mod
+AIC(mod, mod2)
+
+mod$fitted.values  |> hist(breaks=30)
+
+par(mfrow = c(2,2))
+gam.check(mod)
+par(mfrow = c(1,1))
+
+mod |> 
+  plot_predictions(by = c("time_ind", "district"),
+                   points=1,
+                   # transform = \(x) {(exp(x)-1) |> sapply(\(y) ifelse(y<0,0,y))}
+                   # transform = \(x) {(x-1) |> sapply(\(y) ifelse(y<0,0,y))}
+                   )
+
+mod |> 
+  plot_predictions(by = c("month_ind", "district"),
+                   points=1)
+
+mod |> 
+  plot_predictions(condition = c("month_ind", "district"))
+
+
+
+# Do model to visualize unidimensional splines
+
+
+```
+
+
+```{r}
+#| eval: false
+
+# Dataframe to store imputed data
+df_environ_impute <- df_environ
+
+df_environ_impute_moshi <- df_environ_impute |> 
+  filter(district == "Moshi") |> 
+  arrange(date)
+
+df_environ_impute_siha <- df_environ_impute |> 
+  filter(district == "Siha") |> 
+  arrange(date)
+
+interval(min(date), date) / months(1) + 1
+
+library(mgcv)
+library(gratia)
+library(marginaleffects)
+df_environ_impute_siha |> 
+  ggplot() +
+  geom_line(
+    aes(x=date, y=n_raindays)
+  )
+
+df_environ_impute_siha <- df_environ_impute_siha |> 
+  mutate(
+    time_ind = interval(min(date), date) / months(1) + 1,
+    month_ind = month(date)
+  )
+
+df_environ_impute_siha |> 
+  print(n=Inf)
+
+
+
+# Check dlnm::crossbasis() and mgcv::tensor.prod.model.matrix(X) are the same
+
+library(dlnm)
+X <- list(matrix(0:3,2,2),matrix(c(5:8,0,0),2,3))
+X
+tensor.prod.model.matrix(X)
+X[[1]]%.%X[[2]]
+
+dlnm::crossbasis(t(X[[1]]%.%X[[2]]))
+
+
+vec <- rpois(10, 10)
+
+tsModel::Lag(vec, 3, factor(rep(c(1,2), length.out=length(vec))))
+
+asdf <- tsModel::Lag(vec, 0:2)
+
+library(splines)
+asdf%.%asdf |> 
+  ns(df=3)
+
+ns(asdf, df=3)%.%ns(asdf, df=3)
+
+crossbasis(
+  asdf,
+  argvar = list(fun="ns", knots = 3),
+  arglag = list(fun="ns", knots = 1)
+)
+
+cb <- crossbasis(
+  df_environ_impute_siha$pm2p5,
+  lag = 3,
+  argvar = list(fun="ns", knots = 3),
+  arglag = list(fun="ns", knots = 1)
+)
+
+mod_cb <- gam(n_raindays ~ cb,
+    data=df_environ_impute_siha,
+    family = poisson()
+    )
+
+mod_cb
+
+model.matrix(mod_cb)
+
+# tsModel::Lag(df_environ_impute_siha$pm2p5, 0:3)
+
+df_environ_impute_siha_alt <- df_environ_impute_siha |> 
+  mutate(
+    pm2p5_l1 = lag(pm2p5, 1),
+    pm2p5_l2 = lag(pm2p5, 2),
+    pm2p5_l3 = lag(pm2p5, 3),
+    pm2p5_l4 = lag(pm2p5, 4)
+    ) |> 
+  rename(pm2p5_l0 = pm2p5) |> 
+  pivot_longer(
+    cols = starts_with("pm2p5"),
+    values_to = "pm2p5",
+    names_to = "lag",
+    names_prefix = "pm2p5_l"
+  ) |> 
+  mutate(lag = as.numeric(lag))
+
+df_environ_impute_siha_alt |> 
+  print(width=Inf, n=20)
+
+mod_te <- gam(n_raindays ~ te(pm2p5, lag, bs=c("cr", "cr"), k=c(10,4)),
+    data=df_environ_impute_siha_alt,
+    family = poisson()
+    )
+
+mod_te_cb <- gam(n_raindays ~ s(pm2p5, lag, bs="cb", k=c(10,4),
+                                xt = list(bs = "cr")),
+    data=df_environ_impute_siha_alt,
+    family = poisson()
+    )
+
+mod_te |> draw()
+mod_te_cb |> draw()
+mod_cb |> draw()
+
+
+model.matrix(mod_te) |> dim()
+model.matrix(mod_te_cb) |> dim()
+model.matrix(mod_cb) |> dim()
+
+model.matrix(mod_te_cb)[,2]
+model.matrix(mod_cb)[,2]
+
+# # DEFINE MATRICES TO BE INCLUDED AS TERMS IN THE SMOOTHER
+
+df_environ_impute_siha_alt |> 
+  select(pm2p5, lag, time_ind) |> 
+  pivot_wider(
+    names_from = lag,
+    values_from = pm2p5
+  ) |> 
+  print(n=20)
+
+lag_max <- 4
+Q <- tsModel::Lag(df_environ_impute_siha$pm2p5,0:lag_max)
+L <- matrix(0:lag_max,nrow(Q),ncol(Q),byrow=TRUE)
+
+
+mod_cb <- gam(n_raindays ~ s(Q, L, bs="cb", k=c(10,4),
+                             xt = list(bs = "cr")),
+    data=df_environ_impute_siha,
+    family = poisson()
+    )
+
+mod_cb |> draw()
+
+mod_cb_te <- gam(n_raindays ~ te(Q, L, bs="cr", k=c(10,4)),
+    data=df_environ_impute_siha,
+    family = poisson()
+    )
+
+mod_cb_te |> draw()
+model.matrix(mod_cb_te) |> dim()
+
+model.matrix(mod_cb)
+
+
+
+cb <- crossbasis(
+  Q,
+  argvar = list(fun="bs", knots = 10),
+  arglag = list(fun="bs", knots = 4)
+)
+
+
+mod_te |> draw()
+
+fdsa <- splines::ns(df_environ_impute_siha$time_ind, df=6)
+
+mod1 <- gam(n_raindays ~ cb,
+    data=df_environ_impute_siha,
+    family = poisson()
+    )
+
+mod1 |> draw()
+
+plot_predictions(mod1, type="response", by=c("cb"),
+                 # points=1
+                 )
+
+plot_predictions(mod1, type="response", condition=c("cb"),
+                 # points=1
+                 )
+
+
+mod <- gam(n_raindays ~ s(time_ind, bs = "bs") + s(month_ind, bs="cc"),
+    data=df_environ_impute_siha,
+    family = poisson()
+    )
+
+mod <- gam(n_raindays ~ te(month_ind, time_ind, bs=c("cc", "tp")),
+    data=df_environ_impute_siha,
+    family = poisson()
+    )
+
+
+
+cp <- crosspred("Q",mod_cb, cen=10)
+
+cp |> plot()
+
+  
+
+# 
+# # RUN THE GAM MODEL AND PREDICT (TAKES ~17sec IN A 2.4 GHz PC)
+# # SET 'cb' SMOOTHER WITH DIMENSION 10 FOR EACH SPACE (MINUS CONSTRAINTS)
+# system.time({
+# gam1 <- gam(death~s(Q,L,bs="cb",k=10)+ns(time,10*14)+dow,family=quasipoisson(),
+#   london,method='REML')
+# })
+# pred3dgam1 <- crosspred("Q",gam1,at=-3:29,cen=20)
+# predslgam1 <- crosspred("Q",gam1,by=0.2,bylag=0.2,cen=20)
+
+mod1 |> summary()
+mod |> summary()
+
+mod |> draw()
+
+predict(mod, type="response")
+
+plot_predictions(mod, condition="time_ind", type="response",
+                 # points=1
+                 )
+
+plot_predictions(mod, condition=c("time_ind", "month_ind"), type="link",
+                 points=1
+                 )
+
+
+plot_predictions(mod, type="response", by=c("time_ind"),
+                 points=1
+                 )
+
+plot_predictions(mod, type="response", by=c("time_ind"), newdata=df_environ_impute_siha,
+                 points=1
+                 )
+
+
+plot_predictions(mod, type="response", by=c("month_ind"),
+                 points=1
+                 )
+
+
+
+```
+
+
+```{r}
+#| eval: false
+
+# Impute function, Kalman Smoothing with local trend and yearly seasonal component (12 months)
+my_impute <- function(vector) {
+  var_ts <- ts(vector, frequency = 12)
+  na_kalman(var_ts, model="StructTS", smooth=TRUE, type="BSM")
+}
+
+# Dataframe to store imputed data
+df_environ_impute <- df_environ
+
+
+# df already represents the whole range and has the missings
+
+# Impute Moshi
+df_environ_impute_moshi <- df_environ_impute |> 
+  filter(district == "Moshi") |> 
+  arrange(date)
+
+
+df_environ_impute_moshi <- df_environ_impute_moshi |> 
+  mutate(
+    greenness_imp = my_impute(greenness),
+    n_raindays_imp = my_impute(n_raindays),
+    total_rainfall_imp = my_impute(total_rainfall),
+    utci_imp = my_impute(utci),
+  )
+
+
+# Impute Siha
+df_environ_impute_siha <- df_environ_impute |> 
+  filter(district == "Siha") |> 
+  arrange(date)
+
+
+df_environ_impute_siha <- df_environ_impute_siha |> 
+  mutate(
+    greenness_imp = my_impute(greenness),
+    n_raindays_imp = my_impute(n_raindays),
+    total_rainfall_imp = my_impute(total_rainfall),
+    utci_imp = my_impute(utci),
+  )
+
+# Merge
+df_environ_impute <- df_environ_impute_moshi |> 
+  full_join(df_environ_impute_siha)
+
+df_environ_impute_siha |> 
+  print(width=Inf)
+
+# Ouch
+
+df_environ_impute$greenness_imp
+
+df_environ_impute$utci_imp
+
+df_environ_impute$n_raindays_imp
+
+df_environ_impute$total_rainfall_imp
+
+
+
+
+# Visualize imputation
+df_environ_impute |> 
+  mutate(
+    imputed = if_else(is.na(greenness), "Yes", "No")
+  ) |> 
+  ggplot() +
+  geom_point(
+    aes(x=date, y=greenness_imp, color=district, shape=imputed, size=imputed)
+  ) +
+  geom_line(
+    aes(x=date, y=greenness_imp, color=district)
+  ) +
+  scale_shape_manual(
+    values = c(16,4)
+  ) +
+  scale_size_manual(
+    values = c(2.5,8)
+  )
+
+df_environ_impute |> 
+  mutate(
+    imputed = if_else(is.na(utci), "Yes", "No")
+  ) |> 
+  ggplot() +
+  geom_point(
+    aes(x=date, y=utci_imp, color=district, shape=imputed, size=imputed)
+  ) +
+  geom_line(
+    aes(x=date, y=utci_imp, color=district)
+  ) +
+  scale_shape_manual(
+    values = c(16,4)
+  ) +
+  scale_size_manual(
+    values = c(2.5,8)
+  )
+
+df_environ_impute |> 
+  mutate(
+    imputed = if_else(is.na(n_raindays), "Yes", "No")
+  ) |> 
+  ggplot() +
+  geom_point(
+    aes(x=date, y=round(n_raindays_imp), color=district, shape=imputed, size=imputed)
+  ) +
+  geom_line(
+    aes(x=date, y=round(n_raindays_imp), color=district)
+  ) +
+  scale_shape_manual(
+    values = c(16,4)
+  ) +
+  scale_size_manual(
+    values = c(2.5,8)
+  )
+
+
+
+df_environ_impute |> 
+  mutate(
+    imputed = if_else(is.na(total_rainfall), "Yes", "No")
+  ) |> 
+  ggplot() +
+  geom_point(
+    aes(x=date, y=total_rainfall_imp, color=district, shape=imputed, size=imputed)
+  ) +
+  geom_line(
+    aes(x=date, y=total_rainfall_imp, color=district)
+  ) +
+  scale_shape_manual(
+    values = c(16,4)
+  ) +
+  scale_size_manual(
+    values = c(2.5,8)
+  )
+
+
+
+df_environ |> 
+  ggplot() +
+  geom_point(
+    aes(x=date, y=utci, color=district)
+  )
+
+
+df_enviro
+
+
+
+# Population should be integer
+pop_impute <- pop_impute |> 
+  mutate(
+    population_imp = round(population_imp)
+  )
+
+# Visualize imputation
+pop_impute |> 
+  mutate(
+    imputed = if_else(is.na(population), "Yes", "No")
+  ) |> 
+  ggplot() +
+  geom_point(
+    aes(x=date, y=population_imp, color=district, shape=imputed), size=2.5
+  ) +
+  geom_line(
+    aes(x=date, y=population_imp, color=district)
+  ) +
+  scale_shape_manual(
+    values = c(16,4)
+  )
+
+# Save
+pop_impute_save <- pop_impute |> 
+  select(- population) |> 
+  rename(population = population_imp)
+
+write_csv(
+  pop_impute_save,
+  file.path(data_path, "processed", "population_imputed.csv")
+)
+
+
+
+```
+
+
+
+
+
+```{r}
+#| eval: false
+
+# Population
+pop |> 
+  ggplot() +
+  geom_point(
+    aes(x=date, y=population, color=district)
+  )
+
+library(imputeTS)
+tmp <- pop |>
+  full_join(data.frame(date = seq(total_range[1], total_range[2], by="year"))) |>
+  arrange(date) |>
+  print(n=Inf) |> 
+  complete(district, date) |> 
+  drop_na(district) |> 
+  filter(district == "Moshi") 
+
+
+ggplot_na_distribution(x = tmp$population, x_axis_labels = tmp$date)
+ggplot_na_distribution2(x = tmp$population)
+
+# Imputation by Kalman Smoothing
+# The underlying state space representation is either a local trend model (for population yearly data)
+# or a local trend + yearly seasonal component (for the environmental variables)
+
+# does not work
+na_kalman(tmp2$greenness, model="StructTS", smooth=TRUE, type="BSM")
+
+ts_dat <- ts(tmp2$greenness, frequency=12, start=c(min(year(tmp2$date)), 1))
+# does work
+imp <- na_kalman(ts_dat, model="StructTS", smooth=TRUE, type="BSM")
+
+ggplot_na_imputations(ts_dat, imp)
+
+
+acf(diff(tmp$population[1:10]))
+pacf(diff(tmp$population[1:10]))
+
+ts(tmp$population)
+
+tmp2 <- df_environ |> 
+  filter(district=="Moshi") |> 
+  arrange(date)
+
+ts(tmp2$greenness, frequency=12, start=2)
+mod <- ts(tmp2$greenness, frequency=12, start=c(min(year(tmp2$date)), 1)) |> 
+  StructTS(type="BSM")
+
+mod$fitted
+
+mod |> plot()
+
+mod$xtsp
+
+drop_na()
+na.rm(tmp$population)
+
+
+StructTS(tmp$population, type="BSM")
+
+ts()
+
+mod <- ts(1:20, frequency = 4, start = c(1959, 2)) |> 
+  StructTS(type="BSM")
+mod$model
+
+
+imp <- na_interpolation(tmp$population, option="spline")
+imp_mod <- forecast::auto.arima(tmp$population)
+imp <- na_kalman(tmp$population, model="auto.arima", smooth=TRUE)
+
+
+
+fit <- forecast::auto.arima(tmp$population)
+
+fit |> 
+  forecast::interpolate()
+
+forecast::forecast(fit) |> forecast::autoplot()
+
+ggplot_na_imputations(tmp$population, imp)
+
+
+
+
+fit <- arima(tmp$population, order=c(0,1,0), seasonal=c(0,0,0))
+
+fit$model
+
+tmp$population - fit$residuals
+
+forecast::fit(fit)
+
+fable::fitted(fit)
+
+generics::interpolate(fit)
+
+fitted(fit)
+
+predict(fit, n.ahead=2)
+
+imp <- na_interpolation(tmp$population, option="spline")
+imp <- na_kalman(tmp$population)
+
+fit <- forecast::auto.arima(tmp$population)
+
+fit |> 
+  forecast::interpolate()
+
+forecast::forecast(fit) |> forecast::autoplot()
+
+ggplot_na_imputations(tmp$population, imp)
+
+
+
+
+
+```
+
+
+
+
+### Missing data
+
+Visualize the missing data.
+
+```{r}
+# 
+# var_order <- colnames(df_environ)[2:10]
+# 
+# df_environ |>
+#   pivot_longer(
+#     cols = pm2p5:utci,
+#     names_to="variable",
+#     values_to="value"
+#   ) |> 
+#   mutate(
+#     variable = factor(variable, levels=var_order)
+#   ) |> 
+#   ggplot() +
+#   geom_tile(
+#     aes(x=date, y=variable, fill=is.na(value)),
+#     color="black",
+#     width=31
+#   ) +
+#   scale_fill_manual(
+#     values = c("steelblue3", "gray20"),
+#     labels = c("No", "Yes")
+#   ) +
+#   labs(
+#     fill = "Missing",
+#     x = "Month",
+#     y = ""
+#   ) +
+#   facet_wrap(
+#     ~ district,
+#     ncol=2
+#   ) +
+#   theme(
+#     legend.title = element_text(face="bold"),
+#     axis.title = element_text(face="bold"),
+#     strip.text = element_text(face="bold")
+#   )
+
+```
+
+
+The real important range is 2014-2022, which is where we have the disease data. Greenness has some missing values in-between years, which is a problem. We can use the rest of the variables from 2014 to 2020, so we would be losing 2 years of information. Rain is missing for Siha in 2021; if we had it, we would have all environmental variables of 2021 for the regression. The only environmental variable available for 2022 is PM2.5.
+
+We might be able to impute the Greenness values with some criterion. We should ask Netra.
+
+
+
+### Missings
+
+Explore missingness.
+
+```{r}
+#| fig-width: 20
+
+# 
+# df_disease |>
+#   mutate(
+#     disease_group = recode(
+#       disease_group,
+#       `Diarrheal disease/Gastrointesntinal infections`="Diarrheal disease/\nGastrointesntinal infections",
+#       `Other Communicable Diseases/Gastrointestinal infections`="Other Communicable Diseases/\nGastrointestinal infections"
+#       )
+#   ) |> 
+#   ggplot() +
+#   geom_tile(
+#     aes(x=time, y=disease, fill=is.na(n_cases)),
+#     color="black",
+#     width=31
+#   ) +
+#   scale_fill_manual(
+#     values = c("steelblue3", "gray20"),
+#     labels = c("No", "Yes")
+#   ) +
+#   labs(
+#     fill = "Missing",
+#     x = "Month",
+#     y = ""
+#   ) +
+#   facet_grid(
+#     cols = vars(district),
+#     rows = vars(disease_group),
+#     scales = "free_y",
+#     space = "free_y"
+#   ) +
+#   theme(
+#     legend.title = element_text(face="bold"),
+#     axis.title = element_text(face="bold"),
+#     strip.text = element_text(face="bold"),
+#     strip.background = element_blank(),
+#     strip.text.y = element_text(angle=0, size=rel(1)),
+#     strip.text.x = element_text(angle=0, size=rel(1.5))
+#   )
+
+```
+
+There are several diseases with complete observations. The dark squares indicate missing observations recorded as 'NA' in the tables. Blanks represent observations which were not present in the tables.
+
+```{r}
+#| fig-width: 20
+
+# Case rate
+# 
+# df_disease |>
+#   mutate(
+#     disease_group = recode(
+#       disease_group,
+#       `Diarrheal disease/Gastrointesntinal infections`="Diarrheal disease/\nGastrointesntinal infections",
+#       `Other Communicable Diseases/Gastrointestinal infections`="Other Communicable Diseases/\nGastrointestinal infections"
+#       )
+#   ) |>
+#   left_join(
+#     select(df_environ, time, district, population),
+#     by = c("time", "district")
+#   ) |> 
+#   mutate(
+#     case_rate = n_cases / population
+#   ) |> 
+#   # pull(case_rate) |>
+#   # classInt::classIntervals(n=8, style="quantile") |> 
+#   # plot(pal=viridis::viridis_pal()(10))
+#   ggplot() +
+#   geom_tile(
+#     aes(x=time, y=disease, fill=case_rate*1e5),
+#     color="black",
+#     width=31
+#   ) +
+#   facet_grid(
+#     cols = vars(district),
+#     rows = vars(disease_group),
+#     scales = "free_y",
+#     space = "free_y"
+#   ) +
+#   scale_fill_viridis_c(
+#     transform = "log1p",
+#     breaks = c(0,10,100,1000,6000),
+#   ) +
+#   # scale_fill_gradientn(
+#   #   colours = RColorBrewer::brewer.pal(9, "Greens"),
+#   #   transform = "log1p",
+#   #   breaks = c(0,10,100,1000,6000)
+#   # ) +
+#   guides(
+#     fill = guide_colorbar(
+#       barheight = 46,
+#       title.vjust = 2,
+#     )
+#   ) +
+#   labs(
+#     fill = "Incidence rate\n(per 100k people)",
+#     x = "Month",
+#     y = ""
+#   ) +
+#   theme(
+#     legend.title = element_text(face="bold"),
+#     axis.title = element_text(face="bold"),
+#     strip.text = element_text(face="bold"),
+#     strip.background = element_blank(),
+#     strip.text.y = element_text(angle=0, size=rel(1)),
+#     strip.text.x = element_text(angle=0, size=rel(1.5)),
+#     legend.text = element_text(face="bold", size=rel(1.0))
+#   )
+```
+
+
+
+```{r}
+#| fig-width: 20
+
+# Case rate
+# 
+# df_disease |>
+#   mutate(
+#     disease_group = recode(
+#       disease_group,
+#       `Diarrheal disease/Gastrointesntinal infections`="Diarrheal disease/\nGastrointesntinal infections",
+#       `Other Communicable Diseases/Gastrointestinal infections`="Other Communicable Diseases/\nGastrointestinal infections"
+#       )
+#   ) |>
+#   left_join(
+#     select(df_environ, time, district, population),
+#     by = c("time", "district")
+#   ) |> 
+#   mutate(
+#     case_rate = n_cases / population
+#   ) |> 
+#   # pull(case_rate) |>
+#   # classInt::classIntervals(n=8, style="quantile") |> 
+#   # plot(pal=viridis::viridis_pal()(10))
+#   ggplot() +
+#   geom_tile(
+#     aes(x=time, y=disease, fill=case_rate*1e5),
+#     color="black",
+#     width=31
+#   ) +
+#   facet_grid(
+#     cols = vars(district),
+#     rows = vars(disease_group),
+#     scales = "free_y",
+#     space = "free_y"
+#   ) +
+#   # ) +
+#   scale_fill_viridis_b(
+#     # transform = "log1p",
+#     breaks = c(0,1,10,100,1000,6000)
+#   ) +
+#   guides(
+#     fill = guide_colorsteps(
+#       even.steps = TRUE,
+#       barheight = 46,
+#       title.vjust = 2,
+#     )
+#   ) +
+#   labs(
+#     fill = "Incidence rate\n(per 100k people)",
+#     x = "Month",
+#     y = ""
+#   ) +
+#   theme(
+#     legend.title = element_text(face="bold"),
+#     axis.title = element_text(face="bold"),
+#     strip.text = element_text(face="bold"),
+#     strip.background = element_blank(),
+#     strip.text.y = element_text(angle=0, size=rel(1)),
+#     strip.text.x = element_text(angle=0, size=rel(1.5)),
+#     legend.text = element_text(face="bold", size=rel(1.0))
+#   )
+```
+
+Repeat the figure grouping infectious diseases and non-communicable. Remove other vector-borne diseases (too many missings).
+
+
+```{r}
+#| fig-width: 20
+
+# Case rate
+# 
+# df_disease |>
+#   mutate(
+#     disease_group = recode(
+#       disease_group,
+#       `Diarrheal disease/Gastrointesntinal infections`="Diarrheal disease/\nGastrointesntinal infections",
+#       `Other Communicable Diseases/Gastrointestinal infections`="Other Communicable Diseases/\nGastrointestinal infections"
+#       )
+#   ) |>
+#   # Remove disease category with many missings
+#   filter(disease_group != "Other vector borne diseases") |> 
+#   left_join(
+#     select(df_environ, time, district, population),
+#     by = c("time", "district")
+#   ) |> 
+#   mutate(
+#     case_rate = n_cases / population
+#   ) |> 
+#   ggplot() +
+#   geom_tile(
+#     aes(x=time, y=disease, fill=case_rate*1e5),
+#     color="black",
+#     width=31
+#   ) +
+#   facet_nested(
+#     cols = vars(district),
+#     rows = vars(disease_communicable, disease_group),
+#     scales = "free_y",
+#     space = "free_y",
+#     # strip = strip_vanilla(size = "variable", clip = "off"),
+#     strip = strip_nested(size = "variable", clip="off", bleed = FALSE),
+#     solo_line = TRUE,
+#     nest_line = TRUE,
+#     # switch = "y"
+#   ) +
+#   scale_fill_viridis_c(
+#     transform = "log1p",
+#     breaks = c(0,10,100,1000,6000),
+#   ) +
+#   guides(
+#     fill = guide_colorbar(
+#       barheight = 46,
+#       title.vjust = 2,
+#     )
+#   ) +
+#   labs(
+#     fill = "Incidence rate\n(per 100k people)",
+#     x = "Month",
+#     y = ""
+#   ) +
+#   theme(
+#     legend.title = element_text(face="bold"),
+#     axis.title = element_text(face="bold"),
+#     strip.text = element_text(face="bold"),
+#     strip.background = element_blank(),
+#     # ggh4x.facet.nestline = element_line(colour = "black"),
+#     strip.text.y = element_text(angle=0, size=rel(1)),
+#     strip.text.x = element_text(angle=0, size=rel(1.5)),
+#     legend.text = element_text(face="bold", size=rel(1.0))
+#   )
+
+```
+
+
+Save separate dataframes.
+
+```{r}
+# saveRDS(
+#   df_environ,
+#   file.path(data_path, "processed", "environmental-variables_moshi-siha.Rds")
+# )
+# 
+# saveRDS(
+#   df_disease,
+#   file.path(data_path, "processed", "disease-cases_moshi-siha.Rds")
+# )
+```
+
+As the data is not too large, we will merge the environmental variables and the disease cases.
+
+```{r}
+
+# data <- full_join(df_disease, df_environ, by=c("district", "time"))
+# 
+# 
+# # Prepare variables
+# data <- data |> 
+#   mutate(
+#     # Case_rate for plotting
+#     case_rate = n_cases / population,
+#   ) |> 
+#   arrange(district, time)
+# 
+# data |> print(width=Inf)
+```
+
+
+
+
+```{r}
+#| eval: false
+
+library(MARSS)
+
+
+df_environ
+
+# Multivariate state-space model
+
+# Data as matrix, rows are variables, columns are time points
+#       Time
+# Moshi
+# Siha
+
+y <- df_environ |> 
+  arrange(district, date) |> 
+  pull(greenness) |> 
+  matrix(nrow=2, byrow=TRUE)
+
+y
+
+
+yts <- ts(t(y), frequency = 12) # monthly data
+mcov <- forecast::seasonaldummy(yts) |> t() # month factor
+
+
+
+
+
+B1 <- matrix(list("b",0,0,"b"),2,2)
+
+# matrix(c("b",0,0,"b"),2,2)
+
+U1 <- matrix(0,2,1)
+Q1 <- matrix(c("q11","q12","q12","q22"),2,2)
+Z1 <- matrix(c(1,0,1,1,1,0),3,2)
+A1 <- matrix(list("a1",0,0),3,1)
+R1 <- matrix(list("r11",0,0,0,"r",0,0,0,"r"),3,3)
+pi1 <- matrix(0,2,1); V1=diag(1,2)
+model.list <- list(B=B1,U=U1,Q=Q1,Z=Z1,A=A1,R=R1,x0=pi1,V0=V1,tinitx=0)
+
+
+
+y <- Z1 %*% x + matrix(rnorm(3*50,0,0.1), 3, 50)
+
+
+
+df_environ
+
+df_environ |> 
+  select(district, date, greenness) |> 
+  data.matrix()
+
+
+data.matrix(df_environ)
+
+matrix(rnorm(3*50,0,0.1), 3, 50) |> dim()
+
+
+
+
+```
