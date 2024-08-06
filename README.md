@@ -141,6 +141,7 @@ $$
 This model formulation is the same as fitting separate models for each district, but we included both districts in the model to be able to make contrasts between them.
 
 For a given district, we can express the model equation in terms of a trend and a seasonal component:
+
 $$
 \begin{gathered}
 g  [ \mathbb{E}(y_{i}) ] = \text{Trend}_i + \text{Seasonal}_i \\
