@@ -208,7 +208,7 @@ However, for the variables with a log link function, the time series decompositi
 
 $$
 \begin{gathered}
-\log  [ \mathbb{E}(y_{i}) ] = \text{Trend}_i + \text{Seasonal}_i \\
+\log [ \mathbb{E}(y_{i}) ] = \text{Trend}_i + \text{Seasonal}_i \\
 \mathbb{E}(y_{i}) = \exp(\text{Trend}_i) \ \exp(\text{Seasonal}_i)
 \end{gathered}
 $$
