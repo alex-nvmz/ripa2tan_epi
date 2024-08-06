@@ -494,11 +494,11 @@ The 'disease' category is the most important one for the analyses. Categories 'd
 
 
 ```{r}
-# Save
-write_csv(
-  df_disease,
-  file.path(data_path, "processed", "disease.csv")
-)
+# Save after checking missings
+# write_csv(
+#   df_disease,
+#   file.path(data_path, "processed", "disease.csv")
+# )
 ```
 
 
@@ -582,10 +582,15 @@ df_environ |>
     strip.text = element_text(face="bold")
   )
 
-map(
-  paste0(file.path(res_path, "plots", "environmental_missing."), c("svg", "png")),
-  ~ ggsave(.x, width=16, height=16*0.618)
+ggsave(
+  file.path(res_path, "plots", "environmental_missing.png"),
+  width=16, height=16*0.618
 )
+
+# map(
+#   paste0(file.path(res_path, "plots", "environmental_missing."), c("svg", "png")),
+#   ~ ggsave(.x, width=16, height=16*0.618)
+# )
 ```
 
 
@@ -649,13 +654,77 @@ df_disease |>
     legend.text = element_text(face="bold", size=rel(1.0))
   )
 
-map(
-  paste0(file.path(res_path, "plots", "disease_missing."), c("svg", "png")),
-  ~ ggsave(.x, width=18, height=18*0.700)
-)
-
 ```
 
+There are missing observations which are not coded as missing
+
+```{r}
+# Fix and repeat plot
+
+df_disease <- df_disease |> 
+  complete(district, date, nesting(disease, disease_group, disease_communicable))
+
+df_disease |> 
+  # More space
+  mutate(
+    disease_group = recode(
+      disease_group,
+      `Diarrheal disease/Gastrointesntinal infections`="Diarrheal disease/\nGastrointesntinal infections",
+      `Other Communicable Diseases/Gastrointestinal infections`="Other Communicable Diseases/\nGastrointestinal infections"
+      )
+  ) |>
+  ggplot() +
+  geom_tile(
+    aes(x=date, y=disease, fill=is.na(n_cases)),
+    color="black",
+    width=31
+  ) +
+  facet_nested(
+    cols = vars(district),
+    rows = vars(disease_communicable, disease_group),
+    scales = "free_y",
+    space = "free_y",
+    # strip = strip_vanilla(size = "variable", clip = "off"),
+    strip = strip_nested(size = "variable", clip="off", bleed = FALSE),
+    solo_line = TRUE,
+    nest_line = TRUE,
+    # switch = "y"
+  ) +
+  scale_fill_manual(
+    values = c("steelblue3", "gray20"),
+    labels = c("No", "Yes")
+  ) +
+  labs(
+    fill = "Missing",
+    x = "Date (month)",
+    y = ""
+  ) +
+  theme(
+    legend.title = element_text(face="bold"),
+    axis.title = element_text(face="bold"),
+    strip.text = element_text(face="bold"),
+    # strip.background = element_rect(fill="white", color="gray"),
+    strip.background = element_blank(),
+    # ggh4x.facet.nestline = element_line(colour = "black"),
+    strip.text.y = element_text(angle=0, size=rel(1)),
+    strip.text.x = element_text(angle=0, size=rel(1.5)),
+    legend.text = element_text(face="bold", size=rel(1.0))
+  )
+
+ggsave(
+  file.path(res_path, "plots", "disease_missing.png"),
+  width=18, height=18*0.700
+)
+```
 
 We have complete observations for many diseases of interest.
+
+
+```{r}
+# Save
+write_csv(
+  df_disease,
+  file.path(data_path, "processed", "disease.csv")
+)
+```
 

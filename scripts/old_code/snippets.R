@@ -331,3 +331,64 @@ p4 <- pred_df |>
 p1 / p2 / p3 / p4 + plot_layout(axes = "collect")
 
 
+# ----------------------------------------------------------------------------------------
+
+
+# 01. Plot the responses
+
+call_list <- list(
+  "pm2p5" = list(var="pm2p5", df=df_environ_model, label="PM2.5 (\U03BCg/m\U00B3)"),
+  "greenness" = list(var="greenness", df=df_environ_model, label="Greenness (NDVI)"),
+  "temp_min" = list(var="temp_min", df=df_environ_model, label="Min. temperature (ºC)"),
+  "temp_mean" = list(var="temp_mean", df=df_environ_model, label="Mean temperature (ºC)"),
+  "temp_max" = list(var="temp_max", df=df_environ_model, label="Max. temperature (ºC)"),
+  "utci" = list(var="utci", df=df_environ_model, label="UTCI"),
+  "total_rainfall" = list(var="total_rainfall", df=df_environ_model, label="Rainfall (mm)"),
+  "n_raindays" = list(var="n_raindays", df=df_environ_model, label="No. rain days")
+)
+
+
+plot_response <- function(var, df, label) {
+  
+  # Rename response to 'y'
+  df <- rename(df, y := {{var}})
+  
+  # Date range for which there are observations
+  date_range_plot <- df |> 
+    filter(! is.na(y)) |> 
+    pull(date) |> 
+    range()
+  
+  # Plot the response ------------------------------------------------------------
+  
+  df |>
+    ggplot() +
+    geom_vline(
+      aes(xintercept = floor_date(date, "year")), linewidth=0.5, color="gray70"
+    ) +
+    geom_line(
+      aes(x=date, y=y, color=district), linewidth=0.8
+    ) +
+    geom_point(
+      aes(x=date, y=y, color=district), size=2.5
+    ) +
+    scale_x_date(
+      date_breaks="year", date_labels = "%Y",
+      limits = date_range_plot
+    ) +
+    scale_color_okabe_ito() +
+    theme_bw(base_size = 18) +
+    labs(
+      color = "District",
+      x = "Date",
+      y = label
+    )
+  
+  ggsave(
+    file.path(res_path, "plots", glue("env_{var}_response.png")),
+    width=16, height=16*0.600
+  )
+}
+
+map(call_list, \(x) do.call(plot_response, x))
+

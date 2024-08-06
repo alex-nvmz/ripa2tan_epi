@@ -79,9 +79,9 @@ pop |>
     y = "Population"
   )
 
-map(
-  paste0(file.path(res_path, "plots", "population."), c("svg", "png")),
-  ~ ggsave(.x, width=16, height=16*0.618)
+ggsave(
+  file.path(res_path, "plots", "population.png"),
+  width=16, height=16*0.600
 )
 ```
 
@@ -153,10 +153,9 @@ pop_imp |>
     size = "Imputed"
   )
 
-map(
-  paste0(file.path(res_path, "plots", "population_imputed."),
-         c("svg", "png")),
-  ~ ggsave(.x, width=16, height=16*0.618)
+ggsave(
+  file.path(res_path, "plots", "population_imputed.png"),
+  width=16, height=16*0.600
 )
 
 # Save
@@ -172,41 +171,51 @@ rm(fit, newdata, pop_reg)
 
 # Environment
 
+TODO: visualize splines
+
+We will fit GAMs to decompose the environmental time series into trend and seasonal components. These models will be used to impute observations in the year range between 2014-2021, to make possible the posterior regression analyses.
+
+
 ```{r}
 df_environ <- read_csv(file.path(data_path, "processed", "environmental.csv"))
 
-
-
-
-
-
-
-
-
-
-
-
-# TODO
-# Visualize splines
-
 # Prepare data for modelling
-df_environ_model <- df_environ
-
-df_environ_model <- df_environ_model |> 
+df_environ_model <- df_environ |> 
   mutate(
     time_ind = interval(min(date), date) / months(1) + 1,
-    year_ind = year(date) - min(year(date)) + 1,
     month_ind = month(date),
     district = factor(district, levels=c("Moshi", "Siha"))
   )
-# 120 or 132
-
 
 df_environ_model |> 
-  print(n=Inf)
+  print(width=Inf, n=13)
+```
 
+
+```{r}
 env_analysis <- function(var, df, family, label,
                          transform=\(x) x, inv_transform=\(x) x){
+  #' This function does descriptive analyses for each environmental variable
+  #' 
+  #' Arguments:
+  #'  var: str, variable name
+  #'  df: dataframe with the data
+  #'  family: distribution of the response
+  #'  label: str, label for the response
+  #'  transform: function to transform the response (default: identity)
+  #'  inv_transform: function to undo the transformation of the response (default: identity)
+  #'  
+  #'  Steps:
+  #'    1: Plot the response
+  #'    2: Fit the model
+  #'    3: Validate model (plot diagnostics)
+  #'    4: Compute predictions
+  #'    5: Plot time series decomposition
+  #'    6: Compute contrasts for the trend
+  #'  
+  #'  Returns:
+  #'    A list with the model, predictions, plots and contrasts  
+  
   
   cat(glue("
   \n\n\n
@@ -216,7 +225,6 @@ env_analysis <- function(var, df, family, label,
   ========================================================================================
   
   "))
-  print(var)
   
   # Rename response to 'y'
   df <- rename(df, y := {{var}})
@@ -248,43 +256,37 @@ env_analysis <- function(var, df, family, label,
     theme_bw(base_size = 18) +
     labs(
       color = "District",
-      x = "Date",
+      x = "Date (month)",
       y = label
     )
-  print(p_var)
   
-  # Transform the response
-  # df <- mutate(df, y = transform(y))
+  ggsave(
+    file.path(res_path, "plots", "environmental_descriptive", glue("env_{var}_response.png")),
+    width=16, height=16*0.600
+  )
   
   # Step 2: Fit the model ----------------------------------------------------------------
   
   # Penalized GAM
   # Contains penalized smooth functions of time and month
-  # Function of time (trend) is cubic splines with a maximum complexity of 10 knots (1 per year)
-  # Function of month (seasonal component) is cyclic cubic splines with a maximum complexity of 12 knots
+  # Function of time (trend) is cubic spline with 1 basis function per year
+  # Function of month (seasonal component) is cyclic cubic splines with 12 basis functions
   # We allow the seasonal and trend components to interact, so the seasonal component can
   # change over time. The interaction is computed with a tensor product of the two functions
   
-  # Number of knots: 10
-  # df |> 
-  #   filter(! is.na(y)) |> 
-  #   pull(date) |> 
-  #   year() |> 
-  #   range() |> 
-  #   diff()+1
+  # Number of basis functions for trend: 10 or 11
+  k_trend <- df |>
+    filter(! is.na(y)) |>
+    pull(date) |>
+    year() |>
+    range() |>
+    diff()+1
   
-  # form <- y ~ 0 + district + 
-  #   ti(time_ind, bs="cr", k=10, by=district) + 
-  #   ti(month_ind, bs="cc", k=12, by=district) + 
-  #   ti(time_ind, month_ind, bs=c("cr", "cc"), k=c(10,12), by=district)
-  
+  # Formula
   form <- transform(y) ~ 0 + district +
-    ti(time_ind, bs="cr", k=10, by=district) +
+    ti(time_ind, bs="cr", k=k_trend, by=district) +
     ti(month_ind, bs="cc", k=12, by=district) +
-    ti(time_ind, month_ind, bs=c("cr", "cc"), k=c(10,12), by=district)
-  
-  # form2 <- y ~ 0 + district + 
-  #   te(time_ind, month_ind, bs=c("cr", "cc"), k=c(10, 12), by=district)
+    ti(time_ind, month_ind, bs=c("cr", "cc"), k=c(k_trend,12), by=district)
   
   # Start and end points of monthly cyclic splines
   # note: Slightly out of c(1,12) to not impose that January (1) is equal to December (12)
@@ -298,19 +300,22 @@ env_analysis <- function(var, df, family, label,
     knots = knots
     )
   
-  # Step 3: Check the model
+  # Step 3: Check the model --------------------------------------------------------------
   
   # Check terms and significance
   print(summary(mod))
   # Check model assumptions
   p_diag <- gratia::appraise(mod)
-  print(p_diag)
-  # Check effect plots
-  # gratia::draw(mod)
+  
+  ggsave(
+    plot=p_diag,
+    file.path(res_path, "plots", "environmental_descriptive", glue("env_{var}_gam_diagnostics.png")),
+    width=16, height=16*0.618
+  )
   
   # Step 4: Get predictions, as well as decomposition into trend, seasonal and residual ----
   
-  # note: Standard errors computed by Delta method (marginaleffects default)
+  # note: Standard errors computed with Delta method (marginaleffects default)
   
   pred_df <- df
   
@@ -391,9 +396,6 @@ env_analysis <- function(var, df, family, label,
   pred_df <- pred_df |> 
     left_join(cbind(mod$model, residuals = residuals(mod, type="response")))
   
-  # pred_df |>
-  #   print(width=Inf)
-
   
   # Step 5: Plot time series decomposition -----------------------------------------------
   
@@ -439,7 +441,7 @@ env_analysis <- function(var, df, family, label,
     labs(
       color = "District",
       fill = "District",
-      x = "Date",
+      x = "Date (month)",
       y = label
     )
   
@@ -477,7 +479,7 @@ env_analysis <- function(var, df, family, label,
     labs(
       color = "District",
       fill = "District",
-      x = "Date",
+      x = "Date (month)",
       y = "Trend"
     )
   
@@ -515,7 +517,7 @@ env_analysis <- function(var, df, family, label,
     labs(
       color = "District",
       fill = "District",
-      x = "Date",
+      x = "Date (month)",
       y = "Seasonality"
     )
   
@@ -551,38 +553,39 @@ env_analysis <- function(var, df, family, label,
     theme_bw(base_size = 18) +
     labs(
       color = "District",
-      x = "Date",
+      x = "Date (month)",
       y = "Residuals"
     )
   
   
   # Merge plots
   p_joint <- p_fit / (p_trend + theme(legend.position = "none")) /
-    (p_season + theme(legend.position = "none"))  /
-    (p_resid + theme(legend.position = "none")) +
+    (p_season + theme(legend.position = "none"))  +
+    # (p_resid + theme(legend.position = "none")) +
     plot_layout(axes = "collect", guides="collect")
   
-  print(p_joint)
+  ggsave(
+    plot=p_joint,
+    file.path(res_path, "plots", "environmental_descriptive", glue("env_{var}_gam_decomposition.png")),
+    width=16, height=16*0.700
+  )
   
   
   # Step 6: Make contrasts for the trend -------------------------------------------------
+  # note: Standard errors computed with Delta method (marginaleffects default)
   
   # - Trend change between 2012-01 and 2021-12
-  
-  # Possibly
-  # - Trend difference between Moshi and Siha
-  # - Slope of the trend
-  
-  # Standard errors computed with Delta method (see marginaleffects package)
   
   # -------------------------------------------.
   
   # - Trend change between 2012-01 and 2021-12
   
   # Check what values of time_ind and month_ind we need for the contrast
-  # df |> 
-  #   filter(date %in% c("2012-01-01", "2021-12-01")) |> 
+  # df |>
+  #   filter(date %in% c("2012-01-01", "2021-12-01")) |>
   #   print(width=Inf)
+  # time_ind=1, month_ind=1
+  # time_ind=120, month_ind=12
   
   # Exclude terms to make predictions for the trend
   exclude_set <- c(
@@ -591,7 +594,9 @@ env_analysis <- function(var, df, family, label,
   )
   
   cat("
+    ------------------------------
     Doing contrasts for the trend:
+    ------------------------------
     ")
   
   # Query explanation:
@@ -613,19 +618,12 @@ env_analysis <- function(var, df, family, label,
     as_tibble()
   
   cat("
+      ------------------------------------
       2012-01-01 to 2021-12-01 difference:
+      
       ")
   contrast_trend_diff |> 
     print(width=Inf)
-  
-  # contrast_trend_diff |> 
-  #   ggplot() +
-  #   geom_point(
-  #     aes(x=district, y=estimate)
-  #   ) +
-  #   geom_linerange(
-  #     aes(x=district, ymin=conf.low, ymax=conf.high)
-  #   )
   
   # Difference in differences test
   contrast_trend_diff_diff <- comparisons(
@@ -643,19 +641,12 @@ env_analysis <- function(var, df, family, label,
     as_tibble()
   
   cat("
+      ---------------------------------------------------
       2012-01-01 to 2021-12-01 difference in differences:
+      
       ")
   contrast_trend_diff_diff |> 
     print(width=Inf)
-  
-  # contrast_trend_diff_diff |> 
-  #   ggplot() +
-  #   geom_point(
-  #     aes(x=1, y=estimate)
-  #   ) +
-  #   geom_linerange(
-  #     aes(x=1, ymin=conf.low, ymax=conf.high)
-  #   )
   
   # Relative change
   contrast_trend_rc <- comparisons(
@@ -671,7 +662,9 @@ env_analysis <- function(var, df, family, label,
     as_tibble()
   
   cat("
+      -----------------------------------------
       2012-01-01 to 2021-12-01 relative change:
+      
       ")
   contrast_trend_rc |> 
     print(width=Inf)
@@ -690,87 +683,15 @@ env_analysis <- function(var, df, family, label,
   ) |> 
     as_tibble()
   cat("
+      -------------------------------------------------------
       2012-01-01 to 2021-12-01 difference in relative change:
+      
       ")
   print(contrast_trend_rc_diff)
   
-  # - Trend difference between Moshi and Siha
-  # Could also compute the trend difference between Moshi and Siha at every time point
+  pred_df |> print(width=Inf)
   
-  # comparisons(
-  #   mod,
-  #   variables = "district",
-  #   comparison = "difference",
-  #   type = "response",
-  #   exclude = exclude_set
-  #   ) |> 
-  #   as_tibble() |> 
-  #   ggplot() +
-  #   geom_line(
-  #     aes(x=time_ind, y=estimate)
-  #   ) +
-  #   geom_ribbon(
-  #     aes(x=time_ind, ymin=conf.low, ymax=conf.high), alpha=0.2
-  #   )
-  
-  # - Slope of the trend
-  # Could also compute slope of the trend at every time point
-  
-  # slopes(
-  #   mod,
-  #   variables = "time_ind",
-  #   exclude = exclude_set,
-  # ) |> 
-  #   as_tibble() |> 
-  #   ggplot() +
-  #   geom_line(
-  #     aes(x=time_ind, y=estimate, color=district)
-  #   ) +
-  #   geom_ribbon(
-  #     aes(x=time_ind, ymin=conf.low, ymax=conf.high, fill=district), alpha=0.2
-  #   )
-  
-  
-  
-  # Step 7: Show imputation / forecast:
-  p_imp <- pred_df |>
-    mutate(
-      y_imp = if_else(is.na(y), pred, y),
-      imputed = if_else(is.na(y), "Yes", "No")
-    ) |> 
-    ggplot() +
-    geom_vline(
-      aes(xintercept = floor_date(date, "year")), linewidth=0.5, color="gray70"
-    ) +
-    geom_line(
-      aes(x=date, y=y_imp, color=district), linewidth=0.8
-    ) +
-    geom_point(
-      aes(x=date, y=y_imp, color=district, shape=imputed, size=imputed),
-    ) +
-    scale_shape_manual(
-      values = c(16,4)
-    ) +
-    scale_size_manual(
-      values = c(2.5,8)
-    ) +
-    scale_x_date(
-      date_breaks="year", date_labels = "%Y",
-      limits = date_range_plot
-    ) +
-    scale_color_okabe_ito() +
-    theme_bw(base_size = 18) +
-    labs(
-      color = "District",
-      x = "Date",
-      y = label,
-      shape = "Imputed",
-      size = "Imputed"
-    )
-  print(p_imp)
-  
-  
-  # Results
+  # Results ------------------------------------------------------------------------------
   res <- list(
     mod = mod,
     pred_df = pred_df,
@@ -781,8 +702,7 @@ env_analysis <- function(var, df, family, label,
       p_trend = p_trend,
       p_season = p_season,
       p_resid = p_resid,
-      p_joint = p_joint,
-      p_imp = p_imp
+      p_joint = p_joint
     ),
     contrasts = list(
       contrast_trend_diff = contrast_trend_diff,
@@ -791,64 +711,1258 @@ env_analysis <- function(var, df, family, label,
       contrast_trend_rc_diff = contrast_trend_rc_diff
     )
   )
-  res
   
   return(res)
 }
 
-colnames(df_environ_model)
+```
 
+```{r}
 call_list <- list(
-  "pm2p5" = list(var="pm2p5", df=df_environ_model, family=gaussian(),
-                 label="PM2.5 (\U03BCg/m\U00B3)"),
-  "greenness" = list(var="greenness", df=df_environ_model, family=gaussian(),
-                     label="Greenness (NDVI)"),
-  "temp_min" = list(var="temp_min", df=df_environ_model, family=gaussian(),
-                    label="Min. temperature (ºC)"),
-  "temp_mean" = list(var="temp_mean", df=df_environ_model, family=gaussian(),
-                     label="Mean temperature (ºC)"),
-  "temp_max" = list(var="temp_max", df=df_environ_model, family=gaussian(),
-                    label="Max. temperature (ºC)"),
-  "utci" = list(var="utci", df=df_environ_model, family=gaussian(), label="UTCI"),
-  "total_rainfall" = list(var="total_rainfall", df=df_environ_model,
-                          family=Gamma(link="log"), label="Rainfall (mm)",
-                          transform = \(x) x+1, inv_transform = \(x) ifelse(x-1<0, 0, x-1)),
-  "n_raindays" = list(var="n_raindays", df=df_environ_model,
-                      family=mgcv::nb(link="log"), label="No. rain days",
-                      transform = \(x) x+1, inv_transform = \(x) ifelse(x-1<0, 0, x-1))
+  "pm2p5" = list(
+    var="pm2p5",
+    df=df_environ_model,
+    label="PM2.5 (\U03BCg/m\U00B3)",
+    family=gaussian()
+    ),
+  "greenness" = list(
+    var="greenness",
+    df=df_environ_model,
+    label="Greenness (NDVI)",
+    family=gaussian()
+    ),
+  "temp_min" = list(
+    var="temp_min",
+    df=df_environ_model,
+    label="Min. temperature (ºC)",
+    family=gaussian()
+    ),
+  "temp_mean" = list(
+    var="temp_mean",
+    df=df_environ_model,
+    label="Mean temperature (ºC)",
+    family=gaussian()
+    ),
+  "temp_max" = list(
+    var="temp_max",
+    df=df_environ_model,
+    label="Max. temperature (ºC)",
+    family=gaussian()
+    ),
+  "utci" = list(
+    var="utci",
+    df=df_environ_model,
+    label="UTCI",
+    family=gaussian()
+    ),
+  "total_rainfall" = list(
+    var="total_rainfall",
+    df=df_environ_model,
+    label="Rainfall (mm)",
+    family=Gamma(link="log"),
+    transform = \(x) x+1,
+    inv_transform = \(x) ifelse(x-1<0, 0, x-1)
+    ),
+  "n_raindays" = list(
+    var="n_raindays",
+    df=df_environ_model,
+    label="No. rain days",
+    family=mgcv::nb(link="log"),
+    transform = \(x) x+1,
+    inv_transform = \(x) ifelse(x-1<0, 0, x-1))
   )
 
-res <- lapply(
+res <- map(
   call_list,
   \(x) do.call(env_analysis, x)
 )
 
-
-
-# res$total_rainfall$plots$p_var
-# res1$total_rainfall$plots$p_joint
-# 
-# res$n_raindays$plots$p_var
-# res$n_raindays$plots$p_diag
-# res$n_raindays$plots$p_joint
-
-
-
-
-
-
-
-
+# Save results
+# saveRDS(res, file.path(res_path, "R_output", "environmental_descriptive.Rds"))
 ```
+
+
+```{r}
+# Get imputations
+df_environ_imp <- df_environ
+
+# For each variable
+for (var in names(call_list)) {
+  print(var)
+  
+  # Get indices where NA
+  na_ind <- which(is.na(df_environ_imp[[var]]))
+  # Substitute predictions
+  df_environ_imp[na_ind, var] <- res[[var]]$pred_df$pred[na_ind]
+}
+
+# Fix n_raindays so that it is integer
+df_environ_imp <- mutate(df_environ_imp, n_raindays = round(n_raindays))
+
+# Filter imputations in year range 2012-2021 (cut out 2022)
+df_environ_imp <- filter(df_environ_imp, year(date) <= 2021)
+
+# Prepare df for plotting
+df_environ_imp_plot <- df_environ_imp |> 
+  left_join(df_environ, join_by(district, date), suffix=c(".imp", ".org")) |> 
+  print(n=Inf)
+
+# Plot imputations
+for (call in call_list) {
+  # Get variable
+  var <- call$var
+  # If no NA, skip
+  vec <- df_environ_imp_plot[[glue("{var}.org")]]
+  if(!any(is.na(vec))) next
+  
+  # Else, plot imputation
+  print(var)
+  
+  df_environ_imp_plot |>
+    mutate(
+      imputed = if_else(is.na(.data[[glue("{var}.org")]]), "Yes", "No")
+    ) |> 
+    ggplot() +
+    geom_vline(
+      aes(xintercept = floor_date(date, "year")), linewidth=0.5, color="gray70"
+    ) +
+    geom_line(
+      aes(x=date, y=.data[[glue("{var}.imp")]], color=district), linewidth=0.8
+    ) +
+    geom_point(
+      aes(x=date, y=.data[[glue("{var}.imp")]], color=district, shape=imputed, size=imputed),
+    ) +
+    scale_shape_manual(
+      values = c(16,4)
+    ) +
+    scale_size_manual(
+      values = c(2.5,8)
+    ) +
+    scale_x_date(
+      date_breaks="year", date_labels = "%Y",
+    ) +
+    scale_color_okabe_ito() +
+    theme_bw(base_size = 18) +
+    labs(
+      color = "District",
+      x = "Date (month)",
+      y = call$label,
+      shape = "Imputed",
+      size = "Imputed"
+    )
+  ggsave(
+    file.path(res_path, "plots", "environmental_descriptive", glue("env_{var}_response_imputed.png")),
+    width=16, height=16*0.600
+  )
+}
+```
+
+
+```{r}
+# Save dataframe with imputed environmental variables
+
+write_csv(
+  df_environ_imp,
+  file.path(data_path, "processed", "environmental_imputed.csv")
+)
+```
+
 
 # Disease
 
+## Prepare data
+
 ```{r}
 df_disease <- read_csv(file.path(data_path, "processed", "disease.csv"))
+```
+
+```{r}
+# Add population (2022 imputed) to disease dataframe
+df_disease_model <- df_disease |> 
+  mutate(year = year(date)) |> 
+  left_join(
+    mutate(pop_imp, year=year(date)),
+    join_by(district, year)
+    ) |> 
+  select(- c(year, date.y)) |> 
+  rename(date = date.x)
+  
+# Compute incidence rate per 100k people
+df_disease_model <- df_disease_model |> 
+  mutate(case_rate = n_cases / population * 1e5)
+
+
+# Set up variables for modelling
+df_disease_model <- df_disease_model |> 
+  mutate(
+    time_ind = interval(min(date), date) / months(1) + 1,
+    month_ind = month(date),
+    district = factor(district, levels=c("Moshi", "Siha"))
+  )
+
+df_disease_model |> 
+  print(width=Inf, n=13)
 
 ```
 
 
+```{r}
+
+# Re-define disease groupings according to Renz and Skevaki notations
+# Type manually
+
+# Renz
+
+ref_renz <- tribble(
+  ~disease_group_renz, ~disease,
+  # 01
+  "Gastrointestinal Infections", c(
+    "Diarrhea With No Dehydration",
+    "Diarrhea With Severe Dehydration",
+    "Dysentery",
+    "Cholera",
+    "Typhoid",
+    "Intestinal Worms"
+    ),
+  # 02
+  "Urinary Infections", c(
+    "Urinary Tract Infections"
+    ),
+  # 03
+  "Respiratory Infections", c(
+    "Upper Respiratory Infections",
+    "Tuberculosis",
+    "Pneumonia, Severe",
+    "Influenza"
+  ),
+  # 04
+  "Other infections", c(
+    "Meningitis",
+    "Rabies",
+    "Measles",
+    "Leprosy",
+    "Infectious Eye Disease",
+    "Skin Infection - Fungal",
+    "Malaria"
+  ),
+  # 05
+  "Malnutrition", c(
+    "Nutritional Disorders, Other",
+    "Moderate Malnutrition",
+    "Marasmus",
+    "Marasmic Kwashiorkor",
+    "Kwashiorkor"
+  ),
+  # 06
+  "Diabetes Mellitus", c(
+    "Diabetes Mellitus"
+  ),
+  # 07
+  "Bronchial Asthma", c(
+    "Bronchial Asthma"
+  ),
+  # 08
+  "Trauma and Injuries", c(
+    "Road Traffic Accidents",
+    "Fractures"
+  ),
+  # 09
+  "Cardiovascular Diseases", c(
+    "Other Cardiovascular Diseases",
+    "Hypertension"
+  ),
+  # 10
+  "Cancer", c(
+    "Neoplasms/Cancer"
+  )
+) |> 
+  unnest(cols=c(disease))
+
+ref_renz |> 
+  print(n=Inf)
+
+
+```
+
+
+```{r}
+# Skevaki
+
+ref_skevaki_block <- tribble(
+  ~disease_block_skevaki, ~disease_group_skevaki,
+  # A
+  "Infectious/Communicable Diseases", c(
+    # a
+    "Gastrointestinal Infections",
+    # b
+    "Vector-borne Infections",
+    # c
+    "Respiratory Infections",
+    # d
+    "Other Communicable Diseases"
+  ),
+  # B
+  "Disorders of Mixed Etiology", c(
+    # e
+    "Diarrheal Diseases",
+    # f
+    "Neurological Diseases"
+  ),
+  # C
+  "Non-Communicable Diseases", c(
+    # g
+    "Cardiovascular Diseases",
+    # h
+    "Respiratory Diseases",
+    # i
+    "Gynecological Diseases",
+    # j
+    "Diabetes Mellitus",
+    # k
+    "Malnutrition",
+    # l
+    "Cancer",
+    # m
+    "Neurological",
+    # n
+    "Trauma",
+    # o
+    "Other Non-Communicable"
+  )
+) |> 
+  unnest(cols=c(disease_group_skevaki))
+
+# ---------------------------------------------
+
+ref_skevaki_group <- tribble(
+  ~disease_group_skevaki, ~disease,
+  # A
+  # a
+  "Gastrointestinal Infections", c(
+    "Diarrhea With Severe Dehydration",
+    "Dysentery",
+    "Cholera",
+    "Typhoid",
+    "Intestinal Worms"
+  ),
+  # b
+  "Vector-borne Infections", c(
+    "Malaria"
+  ),
+  # c
+  "Respiratory Infections", c(
+    "Upper Respiratory Infections",
+    "Tuberculosis",
+    "Pneumonia, Severe",
+    "Influenza"
+  ),
+  # d
+  "Other Communicable Diseases", c(
+    "Schistosomiasis",
+    "Urinary Tract Infections",
+    "Rabies",
+    "Measles",
+    "Leprosy",
+    "Infectious Eye Disease",
+    "Skin Infection - Fungal"
+  ),
+  # B
+  # e
+  "Diarrheal Diseases", c(
+    "Diarrhea With No Dehydration"
+  ),
+  # f
+  "Neurological Diseases", c(
+    "Meningitis",
+    "Acute Flaccid Paralysis"
+  ),
+  # C
+  # g
+  "Cardiovascular Diseases", c(
+    "Other Cardiovascular Diseases",
+    "Hypertension"
+  ),
+  # h
+  "Respiratory Diseases", c(
+    "Bronchial Asthma"
+  ),
+  # i
+  "Gynecological Diseases", c(
+    "Gynecological Diseases"
+  ),
+  # j
+  "Diabetes Mellitus", c(
+    "Diabetes Mellitus"
+  ),
+  # k
+  "Malnutrition", c(
+    "Nutritional Disorders, Other",
+    "Moderate Malnutrition",
+    "Marasmus",
+    "Marasmic Kwashiorkor",
+    "Kwashiorkor"
+  ),
+  # l
+  "Cancer", c(
+    "Neoplasms/Cancer"
+  ),
+  # m
+  "Neurological", c(
+    "Psychoses",
+    "Neuroses",
+    "Epilepsy"
+  ),
+  # n
+  "Trauma", c(
+    "Road Traffic Accidents",
+    "Fractures"
+  ),
+  # o
+  "Other Non-Communicable", c(
+    "Substance Abuse",
+    "Snake and Insect Bites",
+    "Poisoning",
+    "Peptic Ulcers",
+    "Caries"
+  )
+) |>
+  unnest(cols=c(disease))
+
+
+ref_skevaki <- ref_skevaki_block |> 
+  full_join(ref_skevaki_group)
+  
+ref_skevaki |> 
+  print(n=Inf)
+
+rm(ref_skevaki_block, ref_skevaki_group)
+```
+
+
+```{r}
+# Add new disease grouping to model table
+
+df_disease_model <- df_disease_model |> 
+  left_join(ref_renz) |> 
+  left_join(ref_skevaki)
+```
+
+## Explore
+
+Explore disease incidence rates and the different disease groupings.
+
+
+```{r}
+# Original disease classification
+
+df_disease_model |> 
+  # More space
+  mutate(
+    disease_group = recode(
+      disease_group,
+      `Diarrheal disease/Gastrointesntinal infections`="Diarrheal disease/\nGastrointesntinal infections",
+      `Other Communicable Diseases/Gastrointestinal infections`="Other Communicable Diseases/\nGastrointestinal infections"
+      )
+  ) |>
+  ggplot() +
+  geom_tile(
+    aes(x=date, y=disease, fill=case_rate),
+    color="black",
+    width=31
+  ) +
+  scale_fill_viridis_c(
+    transform = "log1p",
+    breaks = c(0,10,100,1000,6000),
+  ) +
+  facet_nested(
+    cols = vars(district),
+    rows = vars(disease_communicable, disease_group),
+    scales = "free_y",
+    space = "free_y",
+    # strip = strip_vanilla(size = "variable", clip = "off"),
+    strip = strip_nested(size = "variable", clip="off", bleed = FALSE),
+    solo_line = TRUE,
+    nest_line = TRUE,
+    # switch = "y"
+  ) +
+  guides(
+    fill = guide_colorbar(
+      barheight = 12,
+      title.vjust = 2,
+    )
+  ) +
+  labs(
+    fill = "Incidence rate\n(per 100k people)",
+    x = "Date (month)",
+    y = ""
+  ) +
+  theme(
+    legend.title = element_text(face="bold"),
+    axis.title = element_text(face="bold"),
+    strip.text = element_text(face="bold"),
+    # strip.background = element_rect(fill="white", color="gray"),
+    strip.background = element_blank(),
+    ggh4x.facet.nestline = element_line(colour = "black"),
+    strip.text.y = element_text(angle=0, size=rel(1)),
+    strip.text.x = element_text(angle=0, size=rel(1.5)),
+    legend.text = element_text(size=rel(1.0))
+  )
+
+
+ggsave(
+  file.path(res_path, "plots", "disease_incidence-rate_original-groups.png"),
+  width=22, height=22*0.530
+)
+
+```
+
+
+```{r}
+# Original groups again, but remove category with many missings
+
+df_disease_model |> 
+  # More space
+  mutate(
+    disease_group = recode(
+      disease_group,
+      `Diarrheal disease/Gastrointesntinal infections`="Diarrheal disease/\nGastrointesntinal infections",
+      `Other Communicable Diseases/Gastrointestinal infections`="Other Communicable Diseases/\nGastrointestinal infections"
+      )
+  ) |>
+  # Remove disease category with many missings
+  filter(disease_group != "Other vector borne diseases") |> 
+  ggplot() +
+  geom_tile(
+    aes(x=date, y=disease, fill=case_rate),
+    color="black",
+    width=31
+  ) +
+  scale_fill_viridis_c(
+    transform = "log1p",
+    breaks = c(0,10,100,1000,6000),
+  ) +
+  facet_nested(
+    cols = vars(district),
+    rows = vars(disease_communicable, disease_group),
+    scales = "free_y",
+    space = "free_y",
+    # strip = strip_vanilla(size = "variable", clip = "off"),
+    strip = strip_nested(size = "variable", clip="off", bleed = FALSE),
+    solo_line = TRUE,
+    nest_line = TRUE,
+    # switch = "y"
+  ) +
+  guides(
+    fill = guide_colorbar(
+      barheight = 12,
+      title.vjust = 2,
+    )
+  ) +
+  labs(
+    fill = "Incidence rate\n(per 100k people)",
+    x = "Date (month)",
+    y = ""
+  ) +
+  theme(
+    legend.title = element_text(face="bold"),
+    axis.title = element_text(face="bold"),
+    strip.text = element_text(face="bold"),
+    # strip.background = element_rect(fill="white", color="gray"),
+    strip.background = element_blank(),
+    ggh4x.facet.nestline = element_line(colour = "black"),
+    strip.text.y = element_text(angle=0, size=rel(1)),
+    strip.text.x = element_text(angle=0, size=rel(1.5)),
+    legend.text = element_text(size=rel(1.0))
+  )
+
+
+ggsave(
+  file.path(res_path, "plots", "disease_incidence-rate_original-groups_minus-missings.png"),
+  width=22, height=22*0.530
+)
+
+```
+
+
+```{r}
+
+# Skevaki groups
+
+df_disease_model |> 
+  filter(
+    !is.na(disease_group_skevaki)
+  ) |> 
+  ggplot() +
+  geom_tile(
+    aes(x=date, y=disease, fill=case_rate),
+    color="black",
+    width=31
+  ) +
+  scale_fill_viridis_c(
+    transform = "log1p",
+    breaks = c(0,10,100,1000,6000),
+  ) +
+  facet_nested(
+    cols = vars(district),
+    rows = vars(disease_block_skevaki, disease_group_skevaki),
+    scales = "free_y",
+    space = "free_y",
+    strip = strip_nested(size = "variable", clip="off", bleed = FALSE),
+    solo_line = TRUE,
+    nest_line = TRUE,
+  ) +
+  guides(
+    fill = guide_colorbar(
+      barheight = 12,
+      title.vjust = 2,
+    )
+  ) +
+  labs(
+    fill = "Incidence rate\n(per 100k people)",
+    x = "Date (month)",
+    y = ""
+  ) +
+  theme(
+    legend.title = element_text(face="bold"),
+    axis.title = element_text(face="bold"),
+    strip.text = element_text(face="bold"),
+    # strip.background = element_rect(fill="white", color="gray"),
+    strip.background = element_blank(),
+    ggh4x.facet.nestline = element_line(colour = "black"),
+    strip.text.y = element_text(angle=0, size=rel(1)),
+    strip.text.x = element_text(angle=0, size=rel(1.5)),
+    legend.text = element_text(size=rel(1.0))
+  )
+
+
+ggsave(
+  file.path(res_path, "plots", "disease_incidence-rate_skevaki-groups.png"),
+  width=22, height=22*0.530
+)
+
+```
+
+```{r}
+# Renz groups
+
+df_disease_model |> 
+  filter(
+    !is.na(disease_group_renz)
+  ) |>
+  ggplot() +
+  geom_tile(
+    aes(x=date, y=disease, fill=case_rate),
+    color="black",
+    width=31
+  ) +
+  scale_fill_viridis_c(
+    transform = "log1p",
+    breaks = c(0,10,100,1000,6000),
+  ) +
+  facet_nested(
+    cols = vars(district),
+    rows = vars(disease_block_skevaki, disease_group_renz),
+    # rows = vars(disease_group_renz),
+    scales = "free_y",
+    space = "free_y",
+    strip = strip_nested(size = "variable", clip="off", bleed = FALSE),
+    solo_line = TRUE,
+    nest_line = TRUE,
+  ) +
+  guides(
+    fill = guide_colorbar(
+      barheight = 12,
+      title.vjust = 2,
+    )
+  ) +
+  labs(
+    fill = "Incidence rate\n(per 100k people)",
+    x = "Date (month)",
+    y = ""
+  ) +
+  theme(
+    legend.title = element_text(face="bold"),
+    axis.title = element_text(face="bold"),
+    strip.text = element_text(face="bold"),
+    # strip.background = element_rect(fill="white", color="gray"),
+    strip.background = element_blank(),
+    ggh4x.facet.nestline = element_line(colour = "black"),
+    strip.text.y = element_text(angle=0, size=rel(1)),
+    strip.text.x = element_text(angle=0, size=rel(1.5)),
+    legend.text = element_text(size=rel(1.0))
+  )
+
+
+ggsave(
+  file.path(res_path, "plots", "disease_incidence-rate_renz-groups.png"),
+  width=22, height=22*0.530
+)
+
+```
+
+
+## Model trend and seasonality
+
+
+```{r}
+disease_analysis <- function(disease, disease_label, df, family){
+  #' This function does descriptive analyses for each disease incidence rate time series
+  #' 
+  #' Arguments:
+  #'  disease: str, disease name
+  #'  df: dataframe with the data
+  #'  family: distribution of the response
+  #'  
+  #'  Steps:
+  #'    1: Plot the response
+  #'    2: Fit the model
+  #'    3: Validate model (plot diagnostics)
+  #'    4: Compute predictions
+  #'    5: Plot time series decomposition
+  #'    6: Compute contrasts for the trend
+  #'  
+  #'  Returns:
+  #'    A list with the model, predictions, plots and contrasts  
+  
+  
+  cat(glue("
+  \n\n\n
+  ========================================================================================    
+                        Doing analysis for disease variable:
+                                        {disease}
+  ========================================================================================
+  
+  "))
+  
+  
+  # Filter dataframe for variable of interest
+  
+  df <- filter(df, disease == {{disease}})
+  
+  # Date range for which there are observations
+  date_range_plot <- df |>
+    filter(! is.na(n_cases)) |>
+    pull(date) |>
+    range()
+  
+  
+  # Step 1: Plot the response ------------------------------------------------------------
+
+  p_var <- df |>
+    ggplot() +
+    geom_vline(
+      aes(xintercept = floor_date(date, "year")), linewidth=0.5, color="gray70"
+    ) +
+    geom_line(
+      aes(x=date, y=case_rate, color=district), linewidth=0.8
+    ) +
+    geom_point(
+      aes(x=date, y=case_rate, color=district), size=2.5
+    ) +
+    scale_x_date(
+      date_breaks="year", date_labels = "%Y",
+      limits = date_range_plot
+    ) +
+    scale_color_okabe_ito() +
+    theme_bw(base_size = 18) +
+    labs(
+      color = "District",
+      x = "Date (month)",
+      y = glue("{disease}\nincidence rate\n(per 100k people)")
+    )
+  
+  ggsave(
+    file.path(res_path, "plots", "disease_descriptive",
+              glue("disease_{disease_label}_incidence-rate.png")),
+    width=16, height=16*0.600
+  )
+  
+  # Step 2: Fit the model ----------------------------------------------------------------
+  
+  # Penalized GAM
+  # Contains penalized smooth functions of time and month
+  # Function of time (trend) is cubic spline with 1 basis function per year
+  # Function of month (seasonal component) is cyclic cubic splines with 12 basis functions
+  # We allow the seasonal and trend components to interact, so the seasonal component can
+  # change over time. The interaction is computed with a tensor product of the two functions
+  
+  # Number of basis functions for trend:
+  k_trend <- df |>
+    filter(! is.na(n_cases)) |>
+    pull(date) |>
+    year() |>
+    range() |>
+    diff()+1
+  
+  form <- n_cases ~ 0 + district +
+    ti(time_ind, bs="cr", k=k_trend, by=district) +
+    ti(month_ind, bs="cc", k=12, by=district) +
+    ti(time_ind, month_ind, bs=c("cr", "cc"), k=c(k_trend,12), by=district)
+  
+  # Start and end points of monthly cyclic splines
+  # note: Slightly out of c(1,12) to not impose that January (1) is equal to December (12)
+  knots = list(month_ind = c(0.5, 12.5))
+  
+  mod <- gam(
+    form,
+    # Include the offset here instead of in the formula, so that it is not used in the predictions
+    # (predictions are incidence rates per 100k people)
+    offset = log(population/1e5),
+    data=df,
+    family = family,
+    method = "REML",
+    knots = knots
+    )
+  
+  # Step 3: Check the model --------------------------------------------------------------
+  
+  # Check terms and significance
+  print(summary(mod))
+  # Check model assumptions
+  p_diag <- gratia::appraise(mod)
+  
+  ggsave(
+    plot=p_diag,
+    file.path(res_path, "plots", "disease_descriptive",
+              glue("disease_{disease_label}_gam_diagnostics.png")),
+    width=16, height=16*0.618
+  )
+  
+  # gratia::draw(mod)
+    
+  # Step 4: Get predictions, as well as decomposition into trend, seasonal and residual ----
+  # note: Standard errors computed with Delta method (marginaleffects default)
+  
+  pred_df <- df
+  
+  # Get predictions for the response
+  pred_name <- "pred"
+  
+  pred_df_sub <- predictions(
+    mod,
+    newdata = df,
+    type = "response",
+  ) |> 
+    as_tibble() |> 
+    select(time_ind, district, estimate, conf.low, conf.high) |> 
+    rename(
+      "{pred_name}" := estimate,
+      "{pred_name}_conf.low" := conf.low,
+      "{pred_name}_conf.high" := conf.high,
+    )
+  
+  pred_df <- pred_df |> 
+    left_join(pred_df_sub)
+  
+  # Predictions for trend
+  pred_name <- "trend"
+  
+  exclude_set <- c(
+    as.character(glue("ti(month_ind):district{levels(pred_df$district)}")),
+    as.character(glue("ti(time_ind,month_ind):district{levels(pred_df$district)}"))
+  )
+  
+  pred_df_sub <- predictions(
+    mod,
+    newdata = df,
+    exclude = exclude_set,
+    type = "response",
+  ) |> 
+    as_tibble() |> 
+    select(time_ind, district, estimate, conf.low, conf.high) |> 
+    rename(
+      "{pred_name}" := estimate,
+      "{pred_name}_conf.low" := conf.low,
+      "{pred_name}_conf.high" := conf.high,
+    )
+  
+  pred_df <- pred_df |> 
+    left_join(pred_df_sub)
+  
+  # Predictions for seasonality
+  pred_name <- "season"
+  
+  exclude_set <- c(
+    "district",
+    as.character(glue("ti(time_ind):district{levels(pred_df$district)}"))
+  )
+  
+  pred_df_sub <- predictions(
+    mod,
+    newdata = df,
+    exclude = exclude_set,
+    type = "response",
+  ) |> 
+    as_tibble() |> 
+    select(time_ind, district, estimate, conf.low, conf.high) |> 
+    rename(
+      "{pred_name}" := estimate,
+      "{pred_name}_conf.low" := conf.low,
+      "{pred_name}_conf.high" := conf.high,
+    )
+  
+  pred_df <- pred_df |> 
+    left_join(pred_df_sub)
+  
+  # Add response residuals
+  pred_df <- pred_df |> 
+    left_join(cbind(mod$model, residuals = residuals(mod, type="response")))
+  
+  pred_df |> print(width=Inf)
+  
+  # Step 5: Plot time series decomposition -----------------------------------------------
+  
+  # Reference bar for y scale
+  barlength <- select(pred_df, c(case_rate, pred:season_conf.high)) |> 
+    sapply(\(x) diff(range(x, na.rm=TRUE))) |> 
+    min()
+  
+  # Plot fitted line
+  p_fit <- pred_df |> 
+    filter(date >= date_range_plot[1] & date <= date_range_plot[2]) |>
+    ggplot() +
+    geom_vline(
+      aes(xintercept = floor_date(date, "year")), linewidth=0.5, color="gray70"
+    ) +
+    geom_vline(
+      aes(xintercept = max(floor_date(date, "year")) + years(1)), linewidth=0.5, color="gray70"
+    ) +
+    geom_point(
+      aes(x=date, y=case_rate, color=district), size=2.5
+    ) + 
+    geom_line(
+      aes(x=date, y=pred, color=district), linewidth=0.8
+    ) +
+    geom_ribbon(
+      aes(x=date, ymin=pred_conf.low, ymax=pred_conf.high, fill=district),
+      alpha=0.2
+    ) +
+    geom_rect(
+      aes(
+        xmin=max(date_range_plot)+60, xmax=max(date_range_plot)+90,
+        ymin=mean(case_rate, na.rm=TRUE) - (barlength/2),
+        ymax=mean(case_rate, na.rm=TRUE) + (barlength/2)
+      ),
+      color="black", fill="gray75"
+    ) +
+    scale_x_date(
+      date_breaks="year", date_labels = "%Y"
+    ) +
+    scale_color_okabe_ito() +
+    scale_fill_okabe_ito() +
+    theme_bw(base_size = 16) +
+    labs(
+      color = "District",
+      fill = "District",
+      x = "Date (month)",
+      y = glue("{disease}\nincidence rate\n(per 100k people)")
+    )
+  
+  # Plot trend
+  p_trend <- pred_df |> 
+    filter(date >= date_range_plot[1] & date <= date_range_plot[2]) |> 
+    ggplot() +
+    geom_vline(
+      aes(xintercept = floor_date(date, "year")), linewidth=0.5, color="gray70"
+    ) +
+    geom_vline(
+      aes(xintercept = max(floor_date(date, "year")) + years(1)), linewidth=0.5, color="gray70"
+    ) +
+    geom_line(
+      aes(x=date, y=trend, color=district), linewidth=0.8
+    ) +
+    geom_ribbon(
+      aes(x=date, ymin=trend_conf.low, ymax=trend_conf.high, fill=district),
+      alpha=0.2
+    ) +
+    geom_rect(
+      aes(
+        xmin=max(date_range_plot)+60, xmax=max(date_range_plot)+90,
+        ymin=mean(trend, na.rm=TRUE) - (barlength/2),
+        ymax=mean(trend, na.rm=TRUE) + (barlength/2)
+      ),
+      color="black", fill="gray75"
+    ) +
+    scale_x_date(
+      date_breaks = "year", date_labels = "%Y"
+    ) +
+    scale_color_okabe_ito() +
+    scale_fill_okabe_ito() +
+    theme_bw(base_size = 18) +
+    labs(
+      color = "District",
+      fill = "District",
+      x = "Date (month)",
+      y = "Trend"
+    )
+  
+  # Plot seasonal component
+  p_season <- pred_df |> 
+    filter(date >= date_range_plot[1] & date <= date_range_plot[2]) |> 
+    ggplot() +
+    geom_vline(
+      aes(xintercept = floor_date(date, "year")), linewidth=0.5, color="gray70"
+    ) +
+    geom_vline(
+      aes(xintercept = max(floor_date(date, "year")) + years(1)), linewidth=0.5, color="gray70"
+    ) +
+    geom_line(
+      aes(x=date, y=season, color=district), linewidth=0.8
+    ) +
+    geom_ribbon(
+      aes(x=date, ymin=season_conf.low, ymax=season_conf.high, fill=district),
+      alpha=0.2
+    ) +
+    geom_rect(
+      aes(
+        xmin=max(date_range_plot)+60, xmax=max(date_range_plot)+90,
+        ymin=mean(season, na.rm=TRUE) - (barlength/2),
+        ymax=mean(season, na.rm=TRUE) + (barlength/2)
+      ),
+      color="black", fill="gray75"
+    ) +
+    scale_x_date(
+      date_breaks = "year", date_labels = "%Y"
+    ) +
+    scale_color_okabe_ito() +
+    scale_fill_okabe_ito() +
+    theme_bw(base_size = 18) +
+    labs(
+      color = "District",
+      fill = "District",
+      x = "Date (month)",
+      y = "Seasonality"
+    )
+  
+  # Plot residuals
+  p_resid <- pred_df |>
+    filter(date >= date_range_plot[1] & date <= date_range_plot[2]) |> 
+    ggplot() +
+    geom_vline(
+      aes(xintercept = floor_date(date, "year")), linewidth=0.5, color="gray70"
+    ) +
+    geom_vline(
+      aes(xintercept = max(floor_date(date, "year")) + years(1)), linewidth=0.5, color="gray70"
+    ) +
+    geom_segment(
+      aes(x=date, y=0, yend=residuals, color=district), linewidth= 1.5, lineend = "butt",
+      position = position_dodge(width=20)
+    ) +
+    geom_hline(yintercept = 0) +
+    ylab("residuals") +
+    geom_rect(
+      aes(
+        xmin=max(date_range_plot)+60, xmax=max(date_range_plot)+90,
+        ymin=mean(residuals, na.rm=TRUE) - (barlength/2),
+        ymax=mean(residuals, na.rm=TRUE) + (barlength/2)
+      ),
+      color="black", fill="gray75"
+    ) +
+    scale_x_date(
+      date_breaks = "year", date_labels = "%Y"
+    ) +
+    scale_color_okabe_ito() +
+    scale_fill_okabe_ito() +
+    theme_bw(base_size = 18) +
+    labs(
+      color = "District",
+      x = "Date (month)",
+      y = "Residuals"
+    )
+  
+  
+  # Merge plots
+  p_joint <- p_fit / (p_trend + theme(legend.position = "none")) /
+    (p_season + theme(legend.position = "none"))  +
+    # (p_resid + theme(legend.position = "none")) +
+    plot_layout(axes = "collect", guides="collect")
+  
+  ggsave(
+    plot=p_joint,
+    file.path(res_path, "plots", "disease_descriptive",
+              glue("disease_{disease_label}_gam_decomposition.png")),
+    width=16, height=16*0.700
+  )
+  
+  
+  # Step 6: Make contrasts for the trend -------------------------------------------------
+  # note: Standard errors computed with Delta method (marginaleffects default)
+  
+  # - Trend change between 2012-01 and 2021-12
+  
+  # -------------------------------------------.
+  
+  # - Trend change between 2012-01 and 2021-12
+  
+  # Check what values of time_ind and month_ind we need for the contrast
+  # df |>
+  #   filter(date %in% c("2012-01-01", "2021-12-01")) |>
+  #   print(width=Inf)
+  # time_ind=1, month_ind=1
+  # time_ind=120, month_ind=12
+  
+  # Exclude terms to make predictions for the trend
+  exclude_set <- c(
+    as.character(glue("ti(month_ind):district{levels(pred_df$district)}")),
+    as.character(glue("ti(time_ind,month_ind):district{levels(pred_df$district)}"))
+  )
+  
+  cat("
+    ------------------------------
+    Doing contrasts for the trend:
+    ------------------------------
+    ")
+  
+  # Query explanation:
+  # For the observations we had at 2012-01 (time_ind==1, month_ind==1),
+  # what is the effect on the trend of changing time_ind to 120 and month_ind to 12 (date being 2021-12)
+  
+  # Difference
+  contrast_trend_diff <- comparisons(
+    mod,
+    newdata = filter(df, time_ind==1),
+    variables = list(time_ind = c(1, 120),
+                     month_ind = c(1, 12)),
+    cross = TRUE,
+    comparison = "difference",
+    type = "response",
+    exclude = exclude_set,
+    
+  ) |> 
+    as_tibble()
+  
+  cat("
+      ------------------------------------
+      2012-01-01 to 2021-12-01 difference:
+      
+      ")
+  contrast_trend_diff |> 
+    print(width=Inf)
+  
+  # Difference in differences test
+  contrast_trend_diff_diff <- comparisons(
+    mod,
+    newdata = filter(df, time_ind==1),
+    variables = list(time_ind = c(1, 120),
+                     month_ind = c(1, 12)),
+    cross = TRUE,
+    comparison = "difference",
+    type = "response",
+    exclude = exclude_set,
+    # Test for the equality of both estimates
+    hypothesis = "b1 = b2"
+  ) |> 
+    as_tibble()
+  
+  cat("
+      ---------------------------------------------------
+      2012-01-01 to 2021-12-01 difference in differences:
+      
+      ")
+  contrast_trend_diff_diff |> 
+    print(width=Inf)
+  
+  # Relative change
+  contrast_trend_rc <- comparisons(
+    mod,
+    newdata = filter(df, time_ind==1),
+    variables = list(time_ind = c(1, 120),
+                     month_ind = c(1, 12)),
+    cross = TRUE,
+    comparison = "lift",
+    type = "response",
+    exclude = exclude_set
+  ) |> 
+    as_tibble()
+  
+  cat("
+      -----------------------------------------
+      2012-01-01 to 2021-12-01 relative change:
+      
+      ")
+  contrast_trend_rc |> 
+    print(width=Inf)
+  
+  # Difference in relative changes test
+  contrast_trend_rc_diff <- comparisons(
+    mod,
+    newdata = filter(df, time_ind==1),
+    variables = list(time_ind = c(1, 120),
+                     month_ind = c(1, 12)),
+    cross = TRUE,
+    comparison = "lift",
+    type = "response",
+    exclude = exclude_set,
+    hypothesis = "b1 = b2"
+  ) |> 
+    as_tibble()
+  cat("
+      -------------------------------------------------------
+      2012-01-01 to 2021-12-01 difference in relative change:
+      
+      ")
+  print(contrast_trend_rc_diff)
+  
+  # Results ------------------------------------------------------------------------------
+  res <- list(
+    mod = mod,
+    pred_df = pred_df,
+    plots = list(
+      p_var = p_var,
+      p_diag = p_diag,
+      p_fit = p_fit,
+      p_trend = p_trend,
+      p_season = p_season,
+      p_resid = p_resid,
+      p_joint = p_joint
+    ),
+    contrasts = list(
+      contrast_trend_diff = contrast_trend_diff,
+      contrast_trend_diff_diff = contrast_trend_diff_diff,
+      contrast_trend_rc = contrast_trend_rc,
+      contrast_trend_rc_diff = contrast_trend_rc_diff
+    )
+  )
+  
+  return(res)
+}
+
+```
+
+## Call
+
+```{r}
+# disease_names <- as.list(unique(df_disease_model$disease))
+disease_names <- df_disease_model |> 
+  filter(!is.na(disease_group_skevaki)) |> 
+  pull(disease) |> 
+  unique() |> 
+  as.list()
+names(disease_names) <- disease_names
+
+call_list <- map(
+  disease_names,
+  \(x) x = list(disease=x,
+                disease_label=str_replace_all(x, c(" "="-","/"="-")),
+                df=df_disease_model,
+                family=mgcv::nb(link="log"))
+  )
+
+# call_list[["Diabetes Mellitus"]]
+# disease="Diabetes Mellitus"
+# disease_label=str_replace_all(disease, c(" "="-","/"="-"))
+```
+
+
+```{r}
+res <- map(
+  call_list,
+  \(x) do.call(disease_analysis, x)
+)
+
+# Save results
+saveRDS(res, file.path(res_path, "R_output", "disease_descriptive.Rds"))
+```
 
 
 
