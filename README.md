@@ -26,9 +26,9 @@ This repository contains the code for the environmental epidemiology analyses of
 
 Processed raw data into three tables:
 
-**`environmental.csv`**
-
 #### Environmental data
+
+**`environmental.csv`**
 
 | Variable       | Type                         | Values             | Description                                                                                                                                                    |
 | -------------- | ---------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -42,12 +42,13 @@ Processed raw data into three tables:
 | n_raindays     | Numerical, natural           | [0, 19]            | Number of rain days                                                                                                                                            |
 | greenness      | Numerical, rational          | [0.24, 0.70]       | Normalized Difference Vegetation Index (NDVI), can take values between -1 and 1                                                                                |
 | utci           | Numerical, rational          | [6, 37]            | Universal Thermal Climate Index<br>(UTCI), multivariate parameter describing the synergistic heat exchanges between the thermal environment and the human body |
+
 UTCI reference:
 Di Napoli, C., Barnard, C., Prudhomme, C., Cloke, H. L., & Pappenberger, F. (2021). ERA5-HEAT: A global gridded historical dataset of human thermal comfort indices from climate reanalysis. _Geoscience Data Journal_, _8_(1), 2–10. [https://doi.org/10.1002/gdj3.102](https://doi.org/10.1002/gdj3.102)
 
-**`disease.csv`**
-
 #### Disease incidence data
+
+**`disease.csv`**
 
 | Variable             | Type               | Values                               | Description                                                                                                        |
 | -------------------- | ------------------ | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
@@ -59,9 +60,9 @@ Di Napoli, C., Barnard, C., Prudhomme, C., Cloke, H. L., & Pappenberger, F. (202
 | n_cases              | Numerical, natural | [0, 10355]                           | Number of cases                                                                                                    |
 
 
-**`population.csv`**
-
 #### Population data
+
+**`population.csv`**
 
 | Variable     | Type               | Values           | Description                                          |
 | ------------ | ------------------ | ---------------- | ---------------------------------------------------- |
@@ -69,6 +70,8 @@ Di Napoli, C., Barnard, C., Prudhomme, C., Cloke, H. L., & Pappenberger, F. (202
 | **date**     | Datum              | [2012, 2021]     | Year                                                 |
 | population   | Numerical, natural | [117773, 237715] | Population                                           |
 
+
+---
 
 ### 02_description-and-imputation.R
 
@@ -103,14 +106,17 @@ Analyses for the trend:
 
 #### GAM specification (1)
 We employed penalized generalized additive models (GAMs) to decompose the different time series into trend and seasonal components. The models were of the following form:
+
 $$
 \begin{gathered}
 g  [ \mathbb{E}(y_{i}) ] = \alpha_{d[i]} + f_{1,d[i]}(t_{i}) + f_{2,d[i]}(m_{i}) + f_{3,d[i]}(t_{i}, m_{i}) \\
 \end{gathered}
 $$
+
 where $y_i$ is the response variable for observation $i$, which follows an exponential family distribution, and $g$ is the link function. The index variable $d_i$ specifies the district the observation belongs to (Moshi or Siha); $t_i$ is the time index, which has a monthly frequency and goes from 1 to $T$ (we have time series with different ranges); and $m_i$ is the month index, which takes values from 1 to 12. 
 
 More briefly:
+
 $$
 \begin{gathered}
 d_i \in \{\text{Moshi}, \text{Siha}\} \\
@@ -118,6 +124,7 @@ t_i = 1,...,T \\
 m_i = 1,...,12 \\
 \end{gathered}
 $$
+
 Each district presents a different intercept $\alpha$, and different smooth functions $f_1(t_i)$, $f_2(m_i)$ and $f_3(t_i,m_i)$. The smooth functions are spline functions, which are paired with penalties to their wiggliness that are taken into account during the fitting process. Spline functions consist in a linear combination of basis functions ($b$), and the number of basis functions is known as the basis complexity, which gives the maximum complexity of the spline function. The temporal trend is represented with $f_1(t_i)$, which is a cubic spline with a basis complexity of one function per year ($J$). The seasonal variation is represented with $f_2(m_i)$, which is a cyclic cubic spline with a basis complexity of 12. Finally, $f_3(t_i,m_i)$ is the tensor product interaction between the trend and seasonal smooth functions, which allows for the seasonal component to change between time steps.
 
 We can write explicitly the spline functions in the following manner, where $\beta$ are the coefficients for the different basis functions $b$:
@@ -139,14 +146,18 @@ $$
 g  [ \mathbb{E}(y_{i}) ] = \text{Trend}_i + \text{Seasonal}_i \\
 \end{gathered}
 $$
+
 where:
+
 $$
 \begin{gathered}
 \text{Trend}_i = \alpha + f_1(t_i) \\
 \text{Seasonal}_i = f_2(m_i) + f_3(t_i,m_i) \\
 \end{gathered}
 $$
+
 ---
+
 Useful references:
 
 Splines:
@@ -160,6 +171,7 @@ Pedersen, E. J., Miller, D. L., Simpson, G. L., & Ross, N. (2019). Hierarchical 
 ##### Environmental variables
 
 For variables `pm2p5`, `temp_min`, `temp_mean`, `temp_max`, `greenness` and `utci`, a Normal model was considered for the response:
+
 $$
 \begin{gathered}
 y_i \sim \text{Normal}
@@ -167,13 +179,16 @@ y_i \sim \text{Normal}
 $$
 
 For `total_rainfall`, a Gamma model with log link function, as the variable is strictly positive and presents a heavy tail to the right. The variable had to be transformed to `total_rainfall`+1 to avoid the logarithm of zero.
+
 $$
 \begin{gathered}
 y_i \sim \text{Gamma} \\
 g = \log
 \end{gathered}
 $$
+
 For `n_raindays`, a Negative Binomial model with log link function, as the variable is a count and we found evidence of overdispersion when fitting a Poisson model. The variable also had to be transformed to `n_raindays`+1 to avoid the logarithm of zero.
+
 $$
 \begin{gathered}
 y_i \sim \text{NegBin} \\
@@ -182,6 +197,7 @@ g = \log
 $$
 
 For the Normal variables, the time series decomposition in the scale of the response is additive.
+
 $$
 \begin{gathered}
 g  [ \mathbb{E}(y_{i}) ] = \mathbb{E}(y_i) = \text{Trend}_i + \text{Seasonal}_i \\
@@ -189,6 +205,7 @@ g  [ \mathbb{E}(y_{i}) ] = \mathbb{E}(y_i) = \text{Trend}_i + \text{Seasonal}_i 
 $$
 
 However, for the variables with a log link function, the time series decomposition is additive in the log scale, but it becomes multiplicative in the response scale:
+
 $$
 \begin{gathered}
 \log  [ \mathbb{E}(y_{i}) ] = \text{Trend}_i + \text{Seasonal}_i \\
@@ -206,14 +223,19 @@ We considered a Negative Binomial model for the monthly incidence with a log lin
 $$
 y_i \sim \text{NegBin}(\mu_i, \theta)
 $$
+
 where $\mu_i$ is the expected incidence and $\theta$ is the dispersion parameter. The incidence is equal to the incidence rate ($\lambda$) times the exposed population ($P$), so $\mu_i=\lambda_i P_i$. Therefore:
+
 $$
 \log \mu_i = \log P_i + \log \lambda_i
 $$
+
 Here, $\log P_i$ is an offset in the equation, and we can model the incidence rate as the linear predictor we specified previously:
+
 $$
 \log \lambda_i = \alpha_{d[i]} + f_{1,d[i]}(t_{i}) + f_{2,d[i]}(m_{i}) + f_{3,d[i]}(t_{i}, m_{i})
 $$
+
 The  decomposition into trend and seasonal is also multiplicative for the response in this case.
 
 ---
