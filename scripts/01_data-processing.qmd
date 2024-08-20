@@ -418,7 +418,8 @@ moshi
 # Siha
 
 siha <- read_csv(
-  file.path(data_path, "raw", "disease_v2", "Siha_monthlydata_cleaned_june_2024.csv"),
+  file.path(data_path, "raw", "disease_v2", "Siha_monthlydata_cleaned_june_2024_august_updated.csv"),
+  # file.path(data_path, "raw", "disease_v2", "Siha_monthlydata_cleaned_june_2024.csv"),
   col_select = -1
 )
 
