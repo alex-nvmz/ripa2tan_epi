@@ -14,6 +14,8 @@ This repository contains the code for the environmental epidemiology analyses of
 ├── README.md
 ├── results
 │   └── plots
+|   └── tables
+|   └── R_output
 └── scripts
     ├── 01_data-processing.qmd
     └── 02_description-and-imputation.qmd
@@ -35,9 +37,9 @@ Processed raw data into three tables:
 | **district**   | Categorical                  | {Moshi, Siha}      | Moshi is an urban district, Siha is a rural district                                                                                                           |
 | **date**       | Datum                        | [2012-01, 2022-12] | Year-month                                                                                                                                                     |
 | pm2p5          | Numerical, positive rational | [6, 42]            | PM2.5 concentration ($\mu$g/m$^3$)                                                                                                                             |
-| temp_min       | Numerical, rational          | [9, 18]            | Minimum temperature (ºC)                                                                                                                                       |
+| temp_min       | Numerical, rational          | [9, 18]            | (Monthly mean) minimum temperature (ºC)                                                                                                                        |
 | temp_mean      | Numerical, rational          | [14, 23]           | Mean temperature (ºC)                                                                                                                                          |
-| temp_max       | Numerical, rational          | [18, 28]           | Maximum temperature (ºC)                                                                                                                                       |
+| temp_max       | Numerical, rational          | [18, 28]           | (Monthly mean) maximum temperature (ºC)                                                                                                                        |
 | total_rainfall | Numerical, positive rational | [0, 604]           | Total rainfall (mm)                                                                                                                                            |
 | n_raindays     | Numerical, natural           | [0, 19]            | Number of rain days                                                                                                                                            |
 | greenness      | Numerical, rational          | [0.24, 0.70]       | Normalized Difference Vegetation Index (NDVI), can take values between -1 and 1                                                                                |
@@ -89,22 +91,28 @@ Select diseases with complete cases for the association analyses.
 ---
 
 Analyses for the trend:
-- Comment on shape (increase/decrease)
-- Estimate trend change from 2012-01 to 2021-12 (absolute and percentage)
-- (Estimate slope and point period of greatest change)
-- (Estimate difference in trends between Moshi and Siha)
-
+- (Average level) Average trend level for Moshi and Siha, then the difference
+- (Average slope) Average yearly trend change for Moshi and Siha, then the difference
+- (Level at specific times) Trend change from {start} to {end} for Moshi and Siha, then the difference
+	- Environmental: from 2012-01 to 2021-12
+	- Disease: from 2014-01 to 2022-12
 
 ---
 
 **Specific steps**:
 
 - Linear prediction of 2022 population: **`population_imputed.csv`**
-- Description of 2014-2022 incidence rates using GAM
 - Description of 2012-2021(22) environmental variables using GAM
-- Prediction of missing environmental data for 2014-2021: **`environmental_imputed.csv`**
+- Prediction of missing environmental data for 2014-2021: **`environmental_imputed.csv`**. For variables:
+    - `total_rainfall`
+    - `n_raindays`
+    - `greenness`
+    - `utci`
+- Updated disease groupings with clinical team input. Filtering out disease with many missings or low incidence rates. **`disease_processed.csv`**
+- Description of 2014-2022 incidence rates using GAM
 
-#### GAM specification (1)
+##### GAM specification (1)
+
 We employed penalized generalized additive models (GAMs) to decompose the different time series into trend and seasonal components. The models were of the following form:
 
 $$
@@ -167,9 +175,9 @@ Perperoglou, A., Sauerbrei, W., Abrahamowicz, M., & Schmid, M. (2019). A review 
 Modelling with GAMs:
 Pedersen, E. J., Miller, D. L., Simpson, G. L., & Ross, N. (2019). Hierarchical generalized additive models in ecology: an introduction with mgcv. _PeerJ_, _7_, e6876. [https://doi.org/10.7717/peerj.6876](https://doi.org/10.7717/peerj.6876)
 
-#### Model particularities
+##### Model particularities
 
-##### Environmental variables
+###### Environmental variables
 
 For variables `pm2p5`, `temp_min`, `temp_mean`, `temp_max`, `greenness` and `utci`, a Normal model was considered for the response:
 
@@ -179,16 +187,16 @@ y_i \sim \text{Normal}
 \end{gathered}
 $$
 
-For `total_rainfall`, a Gamma model with log link function, as the variable is strictly positive and presents a heavy tail to the right. The variable had to be transformed to `total_rainfall`+1 to avoid the logarithm of zero.
+For `total_rainfall`, a Tweedie model with log link function, as the variable is strictly positive and presents a heavy tail to the right. The Tweedie distribution converges to the Poisson when the $p$ power parameter is 1, and to the Gamma when $p$ is 2. This family of distributions allows us to have zeros in the response.
 
 $$
 \begin{gathered}
-y_i \sim \text{Gamma} \\
+y_i \sim \text{Tweedie} \\
 g = \log
 \end{gathered}
 $$
 
-For `n_raindays`, a Negative Binomial model with log link function, as the variable is a count and we found evidence of overdispersion when fitting a Poisson model. The variable also had to be transformed to `n_raindays`+1 to avoid the logarithm of zero.
+For `n_raindays`, a Negative Binomial model with log link function, as the variable is a count and we found evidence of overdispersion when fitting a Poisson model.
 
 $$
 \begin{gathered}
@@ -209,13 +217,12 @@ However, for the variables with a log link function, the time series decompositi
 
 $$
 \begin{gathered}
-\log [ \mathbb{E}(y_{i}) ] = \text{Trend}_i + \text{Seasonal}_i \\
+\log  [ \mathbb{E}(y_{i}) ] = \text{Trend}_i + \text{Seasonal}_i \\
 \mathbb{E}(y_{i}) = \exp(\text{Trend}_i) \ \exp(\text{Seasonal}_i)
 \end{gathered}
 $$
 
-
-##### Disease incidence rates
+###### Disease incidence rates
 
 We can model the disease incidence rates (new monthly cases by exposed population) by specifying a count regression model for the incidence, and allowing the expected value to change with respect to the exposed population.
 
@@ -239,6 +246,28 @@ $$
 
 The  decomposition into trend and seasonal is also multiplicative for the response in this case.
 
+We can also divide the offset by 100,000 so that we can model directly the incidence rate per 100,000 people.
+
+Usually:
+
+$$
+\begin{gathered}
+\mathbb{E}(y_i) = \mu_i = P_i \ \lambda_i \\
+\text{incidence} = \text{people} \ \frac{\text{incidence}}{\text{people}} \
+\end{gathered}
+$$
+
+If the units of $P_i$ become $\frac{\text{people}}{\text{100,000 people}}$, then:
+
+$$
+\begin{gathered}
+\mathbb{E}(y_i) = \mu_i = P_i \ \lambda_i \  \\
+\text{incidence} = \frac{\text{people}}{\text{100,000 people}} \ \frac{\text{incidence}}{\text{people}} \ \text{100,000 people} \ 
+\end{gathered}
+$$
+
+We can choose not to use the offset in the predictions to get the incidence rates per 100,000 people directly.
+
 ---
 
 Useful references:
@@ -249,8 +278,56 @@ https://library.virginia.edu/data/articles/getting-started-with-gamma-regression
 Rate models:
 https://library.virginia.edu/data/articles/getting-started-with-rate-models
 
+Tweedie distribution:
+https://stat.ethz.ch/R-manual/R-patched/library/mgcv/html/Tweedie.html
+https://en.wikipedia.org/wiki/Tweedie_distribution
+
+
+##### Disease grouping and filtering
+
+Initial proposal from Harald and Chrysanthi, respectively:
+
+[disease-grouping_harald.pdf](doc/disease-grouping_harald.pdf)  
+[disease-grouping_chrysanthi.pdf](doc/disease-grouping_chrysanthi.pdf)
+
+Input:
+- Reclassify:
+	- Diarrhea with and without dehydration should be Infectious disease, Gastrointestinal infection
+	- Meningitis should be Infectious.
+	- Urinary tract infections separately.
+	- Infectious eye disease separately.
+	- Bronchial asthma under group: Chronic respiratory disease
+- Diseases to remove either because missings, or unclear definition:
+	- Meningitis
+	- Acute flaccid paralysis
+	- Gynecological diseases
+- Group all cases of Malnutrition, which includes:
+	- Nutritional disorders, other
+	- Moderate malnutrition
+	- Marasmus
+	- Marasmic Kwashiorkor
+	- Kwashiorkor
+- Not done: Filter out diseases with average incidence rate (per 100k people) < 100
+
+Own initiative:
+- Remove diseases with many missings:
+	- Cholera
+	- Rabies
+	- Measles
+	- Influenza
+
+**`disease_processed.csv`**
+
+| Variable             | Type               | Values                                                        | Description                                          |
+| -------------------- | ------------------ | ------------------------------------------------------------- | ---------------------------------------------------- |
+| **district**         | Categorical        | Moshi, Siha                                                   | Moshi is an urban district, Siha is a rural district |
+| **date**             | Datum              | [2014-01, 2022-12]                                            | Year-month                                           |
+| disease              | Categorical        | {Bronchial Asthma, ...}, n=30                                 | The disease name                                     |
+| disease_group        | Categorical        | {Cancer, ...}, n=14                                           | Disease grouping after clinical team input           |
+| disease_communicable | Categorical        | {Non-Communicable Diseases, Infectious/Communicable Diseases} | Whether the disease is communicable or not           |
+| n_cases              | Numerical, natural | [0, 10355]                                                    | Number of cases                                      |
+
 
 ### 03_next-script.R
 
 Exposure-lag-response models.
-

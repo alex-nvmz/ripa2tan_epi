@@ -23,3 +23,5 @@ venv/
 /results/R_output/*
 
 # Others
+/old_code
+/.quarto/
