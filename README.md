@@ -291,12 +291,13 @@ Initial proposal from Harald and Chrysanthi, respectively:
 [disease-grouping_chrysanthi.pdf](doc/disease-grouping_chrysanthi.pdf)
 
 Input:
+- Rename:
+	- Bronchial asthma to Chronic respiratory disease.. Rename group to Respiratory diseases.
 - Reclassify:
 	- Diarrhea with and without dehydration should be Infectious disease, Gastrointestinal infection
 	- Meningitis should be Infectious.
 	- Urinary tract infections separately.
 	- Infectious eye disease separately.
-	- Bronchial asthma under group: Chronic respiratory disease
 - Diseases to remove either because missings, or unclear definition:
 	- Meningitis
 	- Acute flaccid paralysis
@@ -307,6 +308,9 @@ Input:
 	- Marasmus
 	- Marasmic Kwashiorkor
 	- Kwashiorkor
+- Group cases of Diarrhea, which includes:
+	- Diarrhea With Severe Dehydration
+	- Diarrhea With No Dehydration
 - Not done: Filter out diseases with average incidence rate (per 100k people) < 100
 
 Own initiative:
@@ -322,7 +326,7 @@ Own initiative:
 | -------------------- | ------------------ | ------------------------------------------------------------- | ---------------------------------------------------- |
 | **district**         | Categorical        | Moshi, Siha                                                   | Moshi is an urban district, Siha is a rural district |
 | **date**             | Datum              | [2014-01, 2022-12]                                            | Year-month                                           |
-| disease              | Categorical        | {Bronchial Asthma, ...}, n=30                                 | The disease name                                     |
+| disease              | Categorical        | {Hypertension, ...}, n=29                                     | The disease name                                     |
 | disease_group        | Categorical        | {Cancer, ...}, n=14                                           | Disease grouping after clinical team input           |
 | disease_communicable | Categorical        | {Non-Communicable Diseases, Infectious/Communicable Diseases} | Whether the disease is communicable or not           |
 | n_cases              | Numerical, natural | [0, 10355]                                                    | Number of cases                                      |

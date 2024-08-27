@@ -21,7 +21,7 @@
 #' 
 #' # Setup
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 library(tidyverse)
 theme_set(theme_bw(base_size = 16))
 
@@ -38,7 +38,7 @@ library(marginaleffects)  # model interpretation
 
 #' 
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 base_path <- ".."
 data_path <- file.path(base_path, "data")
 res_path <- file.path(base_path, "results")
@@ -50,7 +50,7 @@ res_path <- file.path(base_path, "results")
 #' 
 #' # Population
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 # Load
 pop <- read_csv(file.path(data_path, "processed", "population.csv"))
 
@@ -88,7 +88,7 @@ ggsave(
 #' 
 #' Population has been increasing linearly year by year. Imputing the population of 2022 with a linear prediction seems appropriate.
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 # Get time index for regression
 pop_reg <- pop |> 
   mutate(year=year(date))
@@ -177,7 +177,7 @@ rm(fit, newdata, pop_reg)
 #' We will fit GAMs to decompose the environmental time series into trend and seasonal components. These models will be used to impute observations in the year range between 2014-2021, to make possible the posterior regression analyses.
 #' 
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 df_environ <- read_csv(file.path(data_path, "processed", "environmental.csv"))
 
 # Prepare data for modelling
@@ -193,7 +193,7 @@ df_environ_model |>
 
 #' 
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 df_environ_model
 
 # Create dataframe for analysis
@@ -216,7 +216,7 @@ df_environ_an
 #' 
 #' ## Plot the response
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 
 # Step 1: Plot the response --------------------------------------------------------------
 
@@ -280,7 +280,7 @@ walk2(
 #' 
 #' ## Fit model
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 # Step 2: Fit the model ----------------------------------------------------------------
 
 # Penalized GAM
@@ -357,7 +357,7 @@ df_environ_an <- df_environ_an |>
 #' 
 #' ## Check model
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 # Step 3: Check the model --------------------------------------------------------------
 
 pwalk(
@@ -394,7 +394,7 @@ pwalk(
 #' 
 #' ## Get predictions
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 # Step 4: Get predictions, as well as decomposition into trend, seasonal and residual ----
 
 # Get predictions and time series decomposition
@@ -484,7 +484,7 @@ df_environ_an <- df_environ_an |>
 #' 
 #' ## Plot time series decomposition
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 # Step 5: Plot time series decomposition -----------------------------------------------
 
 # df_environ_an$pred_df[[1]] |> colnames()
@@ -675,7 +675,7 @@ pwalk(
 #' 
 #' ## Get imputations
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 # Step 6: Get imputations needed for the regression model --------------------------------
 # Full observations in year range 2014-2022
 
@@ -784,7 +784,7 @@ write_csv(
 #' 
 #' ## Make contrasts for the trend
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 # Step 7: Make contrasts for the trend -------------------------------------------------
 # note: Standard errors and hypothesis tests computed with Delta method
 # (marginaleffects default)
@@ -1119,7 +1119,7 @@ df_environ_an <- df_environ_an |>
 
 #' 
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 # Prepare table for contrasts
 contrast_tbl_raw <- df_environ_an |> 
   select(var, label, units, contrast_res) |> 
@@ -1149,17 +1149,18 @@ contrast_tbl_full <- contrast_tbl_raw |>
     ),
     District = if_else(is.na(district), "Siha - Moshi", district),
     `Estimate (95% CI)` = glue("{round(estimate, 3)} ({round(conf.low, 3)}, {round(conf.high, 3)})"),
-    `p value` = Hmisc::format.pval(p.value, digits=3),
-    `p value` = if_else(`p value`=="NA", NA, `p value`)
+    star = case_when(
+      p.value < 0.05 ~ "*",
+      .default = ""
+    ),
+    `p value` = Hmisc::format.pval(p.value, na.form="-", digits=4, eps=1e-4),
+    `p value` = paste0(`p value`, star)
   ) |> 
-  select(- c(estimate, conf.low, conf.high, p.value, district, name, units)) |> 
+  select(- c(estimate, conf.low, conf.high, p.value, district, name, units, star)) |> 
   arrange(Contrast) |> 
   gt(
     groupname_col = "label",
     rowname_col = "Contrast"
-  ) |> 
-  sub_missing(
-    missing_text = "-"
   ) |> 
   cols_align(align = "left", columns = "Contrast")
 
@@ -1194,15 +1195,22 @@ contrast_tbl_filt <- contrast_tbl_raw |>
     ),
     District = if_else(is.na(district), "Siha - Moshi", district),
     `Estimate (95% CI)` = glue("{round(estimate, 3)} ({round(conf.low, 3)}, {round(conf.high, 3)})"),
-    `p value` = Hmisc::format.pval(p.value, digits=3),
+    star = case_when(
+      p.value < 0.05 ~ "*",
+      .default = ""
+    ),
+    `p value` = Hmisc::format.pval(p.value, na.form="-", digits=4, eps=1e-4),
+    `p value` = paste0(`p value`, star)
   ) |> 
-  select(- c(estimate, conf.low, conf.high, p.value, district, name, units)) |> 
+  select(- c(estimate, conf.low, conf.high, p.value, district, name, units, star)) |> 
   arrange(Contrast) |> 
   gt(
     groupname_col = "label",
     rowname_col = "Contrast"
   ) |> 
   cols_align(align = "left", columns = "Contrast")
+
+contrast_tbl_filt
 
 # Save
 walk(
@@ -1216,7 +1224,7 @@ walk(
 
 #' 
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 # Save results
 save(
   df_environ_an,
@@ -1224,17 +1232,31 @@ save(
   file = file.path(res_path, "R_output", "environmental_descriptive.RData")
 )
 
+# load(
+#   file.path(res_path, "R_output", "environmental_descriptive.RData")
+#   )
+
 #' 
 #' 
 #' # Disease
 #' 
 #' ## Prepare data
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 df_disease <- read_csv(file.path(data_path, "processed", "disease.csv"))
 
+# Rename diseases
+df_disease <- df_disease |> 
+  mutate(
+    disease = case_match(
+      disease,
+      "Bronchial Asthma" ~ "Chronic Respiratory Disease",
+      .default = disease
+    )
+  )
+
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 # Add population (2022 imputed) to disease dataframe
 df_disease_model <- df_disease |> 
   mutate(year = year(date)) |> 
@@ -1261,11 +1283,10 @@ df_disease_model <- df_disease_model |>
 df_disease_model |> 
   print(width=Inf, n=13)
 
-
 #' 
 #' ### Disease groupings
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 
 # Re-define disease groupings according to Renz and Skevaki notations
 # Type manually
@@ -1317,8 +1338,8 @@ ref_renz <- tribble(
     "Diabetes Mellitus"
   ),
   # 07
-  "Bronchial Asthma", c(
-    "Bronchial Asthma"
+  "Respiratory Diseases", c(
+    "Chronic Respiratory Disease"
   ),
   # 08
   "Trauma and Injuries", c(
@@ -1343,7 +1364,7 @@ ref_renz |>
 
 #' 
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 # Skevaki
 
 ref_skevaki_block <- tribble(
@@ -1442,7 +1463,7 @@ ref_skevaki_group <- tribble(
   ),
   # h
   "Respiratory Diseases", c(
-    "Bronchial Asthma"
+    "Chronic Respiratory Disease"
   ),
   # i
   "Gynecological Diseases", c(
@@ -1497,7 +1518,7 @@ rm(ref_skevaki_block, ref_skevaki_group)
 
 #' 
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 # Final grouping (after discussion)
 
 ref_final_block <- tribble(
@@ -1528,8 +1549,8 @@ ref_final_block <- tribble(
   "Non-Communicable Diseases", c(
     # g
     "Cardiovascular Diseases",
-    # h - new
-    "Chronic Respiratory Diseases",
+    # h - new (new)
+    "Respiratory Diseases",
     # i
     "Gynecological Diseases",
     # j
@@ -1606,9 +1627,9 @@ ref_final_group <- tribble(
     "Hypertension"
   ),
   # h
-  # new
-  "Chronic Respiratory Diseases", c(
-    "Bronchial Asthma"
+  # new (new)
+  "Respiratory Diseases", c(
+    "Chronic Respiratory Disease"
   ),
   # i
   "Gynecological Diseases", c(
@@ -1663,7 +1684,7 @@ rm(ref_final_block, ref_final_group)
 
 #' 
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 # Add new disease grouping to model table
 
 df_disease_model_explore <- df_disease_model |> 
@@ -1676,8 +1697,7 @@ df_disease_model_explore <- df_disease_model |>
 #' 
 #' Explore disease incidence rates and the different disease groupings.
 #' 
-#' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 # Original disease classification
 
 
@@ -1745,7 +1765,7 @@ ggsave(
 
 #' 
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 # Original groups again, but remove category with many missings
 
 df_disease_model_explore |> 
@@ -1769,7 +1789,7 @@ ggsave(
 
 #' 
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 
 # Skevaki groups
 
@@ -1786,7 +1806,7 @@ ggsave(
 
 
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 # Renz groups
 
 df_disease_model_explore |> 
@@ -1802,7 +1822,7 @@ ggsave(
 
 
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 # Final groups
 
 df_disease_model_explore |> 
@@ -1816,12 +1836,11 @@ ggsave(
   width=22, height=22*0.530
 )
 
-
 #' 
 #' 
 #' #### Plot all incidence rate time series
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 df_disease_iter1 <- tibble(
   disease = unique(df_disease_model$disease),
   print_name = str_replace_all(disease, c(" "="-",
@@ -1879,7 +1898,7 @@ pwalk(
 #' 
 #' Use final grouping and filter out diseases according to clinical input, and also if there are many missing values or the incidence rate is too low.
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 # Remove old grouping and replace by the final one
 df_disease_model <- df_disease_model |> 
   left_join(ref_final) |> 
@@ -1890,7 +1909,7 @@ df_disease_model <- df_disease_model |>
   )
 
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 # Remove diseases with no assigned group
 df_disease_model |> 
   filter(is.na(disease_group)) |> 
@@ -1937,8 +1956,40 @@ df_disease_model <- bind_rows(
 
 rm(df_disease_model_malnutrition)
 
+# Add cases of Diarrhea:
+# - Diarrhea With Severe Dehydration
+# - Diarrhea With No Dehydration
+
+df_disease_model_diarrhea <- df_disease_model |> 
+  filter(
+    disease %in% c("Diarrhea With Severe Dehydration", "Diarrhea With No Dehydration")
+  )
+
+df_disease_model_diarrhea <- df_disease_model_diarrhea |> 
+  mutate(
+    disease = "Diarrhea"
+  ) |> 
+  group_by(pick(everything(), -c(n_cases, case_rate))) |> 
+  summarise(
+    n_cases = sum(n_cases)
+  ) |> 
+  ungroup() |> 
+  mutate(case_rate = n_cases / population * 1e5)
+
+df_disease_model <- df_disease_model |> 
+  filter(
+    ! disease %in% c("Diarrhea With Severe Dehydration", "Diarrhea With No Dehydration")
+    )
+
+df_disease_model <- bind_rows(
+  df_disease_model,
+  df_disease_model_diarrhea
+)
+
+rm(df_disease_model_diarrhea)
+
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 # Check initial disease filtering and aggregation
 
 df_disease_model |> 
@@ -1951,7 +2002,7 @@ ggsave(
 
 #' 
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 # Remove other diseases with missings
 # - Cholera
 # - Rabies
@@ -1972,7 +2023,7 @@ ggsave(
 
 #' 
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 # Filter diseases according to incidence rate
 
 # We have 1 missing for Typhoid, but that's it
@@ -2009,7 +2060,12 @@ ggsave(
 #' 
 #' 
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
+# df_disease_model |> 
+#   pull(disease) |> 
+#   unique() |> 
+#   length()
+
 # Save processed disease dataset
 df_disease_model |> 
   select(- c(population, case_rate, time_ind, month_ind)) |> 
@@ -2022,8 +2078,42 @@ df_disease_model |>
 #' 
 #' ## Analysis
 #' 
+#' ### Per disease
 #' 
-## --------------------------------------------------------------------------------------------------------------
+#' 
+## -------------------------------------------------------------------------------------------
+# Setup data
+df_disease <- read_csv(file.path(data_path, "processed", "disease_processed.csv"))
+pop_imp <- read_csv(file.path(data_path, "processed", "population_imputed.csv"))
+
+# Add population (2022 imputed) to disease dataframe
+df_disease_model <- df_disease |> 
+  mutate(year = year(date)) |> 
+  left_join(
+    mutate(pop_imp, year=year(date)),
+    join_by(district, year)
+  ) |> 
+  select(- c(year, date.y)) |> 
+  rename(date = date.x)
+
+# Compute incidence rate per 100k people
+df_disease_model <- df_disease_model |> 
+  mutate(case_rate = n_cases / population * 1e5)
+
+# Set up variables for modelling
+df_disease_model <- df_disease_model |> 
+  mutate(
+    time_ind = interval(min(date), date) / months(1) + 1,
+    month_ind = month(date),
+    district = factor(district, levels=c("Moshi", "Siha"))
+  )
+
+df_disease_model |> 
+  print(width=Inf, n=13)
+
+#' 
+#' 
+## -------------------------------------------------------------------------------------------
 # Dataframe to iterate over for the analyses
 
 df_disease_an <- tibble(
@@ -2043,61 +2133,63 @@ df_disease_an <- df_disease_an |>
 
 #' 
 #' 
-#' ### Plot the response
+#' #### Plot the response
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 # Step 1: Plot the response --------------------------------------------------------------
 
 # Redo the incidence rate plots after disease filtering
 # (We have Malnutrition as an aggregate of diseases now)
 
+
+plot_response_disease <- function(disease, print_name, df_model, ...) {
+  print(disease)
+  
+  df_model |>
+    ggplot() +
+    geom_vline(
+      aes(xintercept = floor_date(date, "year")), linewidth=0.5, color="gray70"
+    ) +
+    geom_line(
+      aes(x=date, y=case_rate, color=district), linewidth=0.8
+    ) +
+    geom_point(
+      aes(x=date, y=case_rate, color=district), size=2.5
+    ) +
+    scale_x_date(
+      date_breaks="year", date_labels = "%Y",
+      # limits = date_range_plot
+    ) +
+    scale_color_okabe_ito() +
+    theme_bw(base_size = 18) +
+    theme(
+      axis.title.y = element_text(size=rel(0.9))
+    ) +
+    labs(
+      color = "District",
+      x = "Date (month)",
+      y = glue("{disease}\nincidence rate\n(per 100k people)")
+    )
+  
+  ggsave(
+    file.path(res_path, "plots", "disease_descriptive",
+              glue("disease_{print_name}_incidence-rate.png")),
+    width=16, height=16*0.600
+  )
+}
+
 pwalk(
   df_disease_an,
-  function(disease, print_name, df_model, ...) {
-    
-    print(disease)
-    
-    df_model |>
-      ggplot() +
-      geom_vline(
-        aes(xintercept = floor_date(date, "year")), linewidth=0.5, color="gray70"
-      ) +
-      geom_line(
-        aes(x=date, y=case_rate, color=district), linewidth=0.8
-      ) +
-      geom_point(
-        aes(x=date, y=case_rate, color=district), size=2.5
-      ) +
-      scale_x_date(
-        date_breaks="year", date_labels = "%Y",
-        # limits = date_range_plot
-      ) +
-      scale_color_okabe_ito() +
-      theme_bw(base_size = 18) +
-      theme(
-        axis.title.y = element_text(size=rel(0.9))
-      ) +
-      labs(
-        color = "District",
-        x = "Date (month)",
-        y = glue("{disease}\nincidence rate\n(per 100k people)")
-      )
-    
-    ggsave(
-      file.path(res_path, "plots", "disease_descriptive",
-                glue("disease_{print_name}_incidence-rate.png")),
-      width=16, height=16*0.600
-    )
-  }
+  plot_response_disease
 )
 
 
 #' 
 #' 
-#' ### Fit model
+#' #### Fit model
 #' 
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 # Step 2: Fit the model ----------------------------------------------------------------
 
 # Get number of basis functions for trend
@@ -2157,48 +2249,49 @@ df_disease_an <- df_disease_an |>
 
 #' 
 #' 
-#' ### Check model
+#' #### Check model
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 # Step 3: Check the model --------------------------------------------------------------
 
-pwalk(
-  df_disease_an,
-  function(disease, print_name, model, ...) {
-    cat(glue(
-      "\n
+check_gam_disease <- function(disease, print_name, model, ...) {
+  cat(glue(
+    "\n
       ---------------------------------------
       Printing model diagnostics of variable:
                        {disease}
       ----------------------------------------
       \n"
-    ))
-    
-    print(summary(model))
-    
-    # Residual diagnostics
-    p_diag <- gratia::appraise(model)
-    # Save plot
-    ggsave(
-      plot=p_diag,
-      filename = file.path(
-        res_path, "plots", "disease_descriptive",
-        glue("disease_{print_name}_gam_diagnostics.png")
-      ),
-      width=16, height=16*0.618
-    )
-    
-    # Optionally: check model component predictions
-    # gratia::draw(model) |> print()
-  }
+  ))
+  
+  print(summary(model))
+  
+  # Residual diagnostics
+  p_diag <- gratia::appraise(model)
+  # Save plot
+  ggsave(
+    plot=p_diag,
+    filename = file.path(
+      res_path, "plots", "disease_descriptive",
+      glue("disease_{print_name}_gam_diagnostics.png")
+    ),
+    width=16, height=16*0.618
+  )
+  
+  # Optionally: check model component predictions
+  # gratia::draw(model) |> print()
+}
+
+pwalk(
+  df_disease_an,
+  check_gam_disease
 )
 
-
 #' 
 #' 
-#' ### Get predictions
+#' #### Get predictions
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 # Step 4: Get predictions, as well as decomposition into trend, seasonal and residual ----
 
 # Get predictions and time series decomposition
@@ -2210,162 +2303,23 @@ df_disease_an <- df_disease_an |>
 #' 
 #' 
 #' 
-#' ### Plot time series decomposition
+#' #### Plot time series decomposition
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 
 # Step 5: Plot time series decomposition -----------------------------------------------
 
 pwalk(
-  df_disease_an,
-  function(pred_df, disease, print_name, var="case_rate", ...) {
-    print(disease)
-    
-    # Reference bar for y scale
-    barlength <- select(pred_df, c(all_of(var), pred:season_conf.high)) |> 
-      sapply(\(x) diff(range(x, na.rm=TRUE))) |>
-      min()
-    
-    # Plot fitted line
-    p_fit <- pred_df |> 
-      ggplot() +
-      geom_vline(
-        aes(xintercept = floor_date(date, "year")), linewidth=0.5, color="gray70"
-      ) +
-      geom_vline(
-        aes(xintercept = max(floor_date(date, "year")) + years(1)), linewidth=0.5, color="gray70"
-      ) +
-      geom_point(
-        aes(x=date, y=.data[[var]], color=district), size=2.5
-      ) + 
-      geom_line(
-        aes(x=date, y=pred, color=district), linewidth=0.8
-      ) +
-      geom_ribbon(
-        aes(x=date, ymin=pred_conf.low, ymax=pred_conf.high, fill=district),
-        alpha=0.2
-      ) +
-      geom_rect(
-        aes(
-          xmin=max(date)+60, xmax=max(date)+90,
-          ymin=mean(.data[[var]], na.rm=TRUE) - (barlength/2),
-          ymax=mean(.data[[var]], na.rm=TRUE) + (barlength/2)
-        ),
-        color="black", fill="gray75"
-      ) +
-      scale_x_date(
-        date_breaks="year", date_labels = "%Y"
-      ) +
-      scale_color_okabe_ito() +
-      scale_fill_okabe_ito() +
-      theme_bw(base_size = 18) +
-      theme(
-        axis.title.y = element_text(size=rel(0.9))
-      ) +
-      labs(
-        color = "District",
-        fill = "District",
-        x = "Date (month)",
-        y = glue("{disease}\nincidence rate\n(per 100k people)")
-      )
-    
-    # Plot trend
-    p_trend <- pred_df |> 
-      ggplot() +
-      geom_vline(
-        aes(xintercept = floor_date(date, "year")), linewidth=0.5, color="gray70"
-      ) +
-      geom_vline(
-        aes(xintercept = max(floor_date(date, "year")) + years(1)), linewidth=0.5, color="gray70"
-      ) +
-      geom_line(
-        aes(x=date, y=trend, color=district), linewidth=0.8
-      ) +
-      geom_ribbon(
-        aes(x=date, ymin=trend_conf.low, ymax=trend_conf.high, fill=district),
-        alpha=0.2
-      ) +
-      geom_rect(
-        aes(
-          xmin=max(date)+60, xmax=max(date)+90,
-          ymin=mean(trend, na.rm=TRUE) - (barlength/2),
-          ymax=mean(trend, na.rm=TRUE) + (barlength/2)
-        ),
-        color="black", fill="gray75"
-      ) +
-      scale_x_date(
-        date_breaks = "year", date_labels = "%Y"
-      ) +
-      scale_color_okabe_ito() +
-      scale_fill_okabe_ito() +
-      theme_bw(base_size = 18) +
-      labs(
-        color = "District",
-        fill = "District",
-        x = "Date (month)",
-        y = "Trend"
-      )
-    
-    # Plot seasonal component
-    p_season <- pred_df |> 
-      ggplot() +
-      geom_vline(
-        aes(xintercept = floor_date(date, "year")), linewidth=0.5, color="gray70"
-      ) +
-      geom_vline(
-        aes(xintercept = max(floor_date(date, "year")) + years(1)), linewidth=0.5, color="gray70"
-      ) +
-      geom_line(
-        aes(x=date, y=season, color=district), linewidth=0.8
-      ) +
-      geom_ribbon(
-        aes(x=date, ymin=season_conf.low, ymax=season_conf.high, fill=district),
-        alpha=0.2
-      ) +
-      geom_rect(
-        aes(
-          xmin=max(date)+60, xmax=max(date)+90,
-          ymin=mean(season, na.rm=TRUE) - (barlength/2),
-          ymax=mean(season, na.rm=TRUE) + (barlength/2)
-        ),
-        color="black", fill="gray75"
-      ) +
-      scale_x_date(
-        date_breaks = "year", date_labels = "%Y"
-      ) +
-      scale_color_okabe_ito() +
-      scale_fill_okabe_ito() +
-      theme_bw(base_size = 18) +
-      labs(
-        color = "District",
-        fill = "District",
-        x = "Date (month)",
-        y = "Seasonality"
-      )
-    
-    
-    # Merge plots
-    p_joint <- p_fit / (p_trend + theme(legend.position = "none")) /
-      (p_season + theme(legend.position = "none"))  +
-      plot_layout(axes = "collect", guides="collect",
-                  heights = c(4,3,3))
-    
-    # Save plot
-    ggsave(
-      plot=p_joint,
-      file.path(res_path, "plots", "disease_descriptive",
-                glue("disease_{print_name}_gam_decomposition.png")),
-      width=16, height=16*0.700
-    )
-  }
+  df_disease_comm_an,
+  plot_ts_decomp_disease
 )
 
 
 #' 
 #' 
-#' ### Make contrasts for the trend
+#' #### Make contrasts for the trend
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 # Step 7: Make contrasts for the trend -------------------------------------------------
 # note: Standard errors and hypothesis tests computed with Delta method
 # (marginaleffects default)
@@ -2687,7 +2641,7 @@ df_disease_an <- df_disease_an |>
 
 #' 
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 # Prepare table for contrasts
 contrast_tbl_dis_raw <- df_disease_an |> 
   select(disease, contrast_res) |> 
@@ -2699,36 +2653,42 @@ contrast_tbl_dis_raw <- df_disease_an |>
   )
 
 # All constrasts
-contrast_tbl_dis_full <- contrast_tbl_dis_raw |> 
-  mutate(
-    Contrast = case_match(
-      name,
-      "avg_yearly_trend_slope" ~ "Average yearly trend change",
-      "avg_yearly_trend_slope_diff" ~ "Average yearly trend change",
-      "avg_trend" ~ "Average trend level",
-      "avg_trend_diff" ~ "Average trend level",
-      "temp_trend_diff" ~ "Trend difference (2012-01 to 2021-12)",
-      "temp_trend_diff_diff" ~ "Trend difference (2012-01 to 2021-12)",
-    ),
-    Contrast = factor(
-      Contrast, levels=c("Average trend level", "Average yearly trend change",
-                         "Trend difference (2012-01 to 2021-12)")
-    ),
-    District = if_else(is.na(district), "Siha - Moshi", district),
-    `Estimate (95% CI)` = glue("{round(estimate, 3)} ({round(conf.low, 3)}, {round(conf.high, 3)})"),
-    `p value` = Hmisc::format.pval(p.value, digits=3),
-    `p value` = if_else(`p value`=="NA", NA, `p value`)
-  ) |> 
-  select(- c(estimate, conf.low, conf.high, p.value, district, name)) |> 
-  arrange(Contrast) |> 
-  gt(
-    groupname_col = "disease",
-    rowname_col = "Contrast"
-  ) |> 
-  sub_missing(
-    missing_text = "-"
-  ) |> 
-  cols_align(align = "left", columns = "Contrast")
+prepare_contrast_table_full <- function(contrast_tbl_dis_raw) {
+  contrast_tbl_dis_raw |> 
+    mutate(
+      Contrast = case_match(
+        name,
+        "avg_yearly_trend_slope" ~ "Average yearly trend change",
+        "avg_yearly_trend_slope_diff" ~ "Average yearly trend change",
+        "avg_trend" ~ "Average trend level",
+        "avg_trend_diff" ~ "Average trend level",
+        "temp_trend_diff" ~ "Trend difference (2012-01 to 2021-12)",
+        "temp_trend_diff_diff" ~ "Trend difference (2012-01 to 2021-12)",
+      ),
+      Contrast = factor(
+        Contrast, levels=c("Average trend level", "Average yearly trend change",
+                           "Trend difference (2012-01 to 2021-12)")
+      ),
+      District = if_else(is.na(district), "Siha - Moshi", district),
+      `Estimate (95% CI)` = glue("{round(estimate, 3)} ({round(conf.low, 3)}, {round(conf.high, 3)})"),
+      star = case_when(
+        p.value < 0.05 ~ "*",
+        .default = ""
+      ),
+      `p value` = Hmisc::format.pval(p.value, na.form="-", digits=4, eps=1e-4),
+      `p value` = paste0(`p value`, star)
+    ) |> 
+    select(- c(estimate, conf.low, conf.high, p.value, district, name, star)) |> 
+    arrange(Contrast) |> 
+    gt(
+      groupname_col = "disease",
+      rowname_col = "Contrast"
+    ) |> 
+    cols_align(align = "left", columns = "Contrast")
+}
+
+
+contrast_tbl_dis_full <- prepare_contrast_table_full(contrast_tbl_dis_raw)
 
 contrast_tbl_dis_full
 
@@ -2741,37 +2701,43 @@ walk(
     )
 )
 
-
 # p.value < 0.05
-contrast_tbl_dis_filt <- contrast_tbl_dis_raw |>
-  filter(p.value < 0.05) |> 
-  mutate(
-    Contrast = case_match(
-      name,
-      "avg_yearly_trend_slope" ~ "Average yearly trend change",
-      "avg_yearly_trend_slope_diff" ~ "Average yearly trend change",
-      "avg_trend" ~ "Average trend level",
-      "avg_trend_diff" ~ "Average trend level",
-      "temp_trend_diff" ~ "Trend difference (2012-01 to 2021-12)",
-      "temp_trend_diff_diff" ~ "Trend difference (2012-01 to 2021-12)",
-    ),
-    Contrast = factor(
-      Contrast, levels=c("Average trend level", "Average yearly trend change",
-                         "Trend difference (2012-01 to 2021-12)")
-    ),
-    District = if_else(is.na(district), "Siha - Moshi", district),
-    `Estimate (95% CI)` = glue("{round(estimate, 3)} ({round(conf.low, 3)}, {round(conf.high, 3)})"),
-    `p value` = Hmisc::format.pval(p.value, digits=3),
-  ) |> 
-  select(- c(estimate, conf.low, conf.high, p.value, district, name)) |> 
-  arrange(Contrast) |> 
-  gt(
-    groupname_col = "disease",
-    rowname_col = "Contrast"
-  ) |> 
-  cols_align(align = "left", columns = "Contrast")
+prepare_contrast_table_filt <- function(contrast_tbl_dis_raw) {
+  contrast_tbl_dis_raw |>
+    filter(p.value < 0.05) |> 
+    mutate(
+      Contrast = case_match(
+        name,
+        "avg_yearly_trend_slope" ~ "Average yearly trend change",
+        "avg_yearly_trend_slope_diff" ~ "Average yearly trend change",
+        "avg_trend" ~ "Average trend level",
+        "avg_trend_diff" ~ "Average trend level",
+        "temp_trend_diff" ~ "Trend difference (2012-01 to 2021-12)",
+        "temp_trend_diff_diff" ~ "Trend difference (2012-01 to 2021-12)",
+      ),
+      Contrast = factor(
+        Contrast, levels=c("Average trend level", "Average yearly trend change",
+                           "Trend difference (2012-01 to 2021-12)")
+      ),
+      District = if_else(is.na(district), "Siha - Moshi", district),
+      `Estimate (95% CI)` = glue("{round(estimate, 3)} ({round(conf.low, 3)}, {round(conf.high, 3)})"),
+      star = case_when(
+        p.value < 0.05 ~ "*",
+        .default = ""
+      ),
+      `p value` = Hmisc::format.pval(p.value, na.form="-", digits=4, eps=1e-4),
+      `p value` = paste0(`p value`, star)
+    ) |> 
+    select(- c(estimate, conf.low, conf.high, p.value, district, name, star)) |> 
+    arrange(Contrast) |> 
+    gt(
+      groupname_col = "disease",
+      rowname_col = "Contrast"
+    ) |> 
+    cols_align(align = "left", columns = "Contrast")
+}
 
-contrast_tbl_dis_filt
+contrast_tbl_dis_filt <- prepare_contrast_table_filt(contrast_tbl_dis_raw)
 
 # Save
 walk(
@@ -2782,10 +2748,9 @@ walk(
     )
 )
 
-
 #' 
 #' 
-## --------------------------------------------------------------------------------------------------------------
+## -------------------------------------------------------------------------------------------
 # Save results
 save(
   df_disease_an,
@@ -2793,3 +2758,445 @@ save(
   file = file.path(res_path, "R_output", "disease_descriptive.RData")
 )
 
+# load(
+#   file.path(res_path, "R_output", "disease_descriptive.RData")
+# )
+
+#' 
+#' 
+#' ### Per disease_communicable
+#' 
+## -------------------------------------------------------------------------------------------
+# Setup data
+df_disease <- read_csv(file.path(data_path, "processed", "disease_processed.csv"))
+pop_imp <- read_csv(file.path(data_path, "processed", "population_imputed.csv"))
+
+
+# Aggregate n_cases by disease_communicable status
+# Rename 'disease_communicable' to 'disease', to keep the rest of the code unchanged
+df_disease_model_comm <- df_disease |> 
+  group_by(district, date, disease_communicable) |> 
+  summarise(
+    n_cases = sum(n_cases)
+  ) |> 
+  ungroup() |> 
+  rename(
+    disease = disease_communicable
+  )
+
+# Add population (2022 imputed) to disease dataframe
+df_disease_model_comm <- df_disease_model_comm |> 
+  mutate(year = year(date)) |> 
+  left_join(
+    mutate(pop_imp, year=year(date)),
+    join_by(district, year)
+  ) |> 
+  select(- c(year, date.y)) |> 
+  rename(date = date.x)
+
+# Compute incidence rate per 100k people
+df_disease_model_comm <- df_disease_model_comm |> 
+  mutate(case_rate = n_cases / population * 1e5)
+
+# Set up variables for modelling
+df_disease_model_comm <- df_disease_model_comm |> 
+  mutate(
+    time_ind = interval(min(date), date) / months(1) + 1,
+    month_ind = month(date),
+    district = factor(district, levels=c("Moshi", "Siha"))
+  )
+
+df_disease_model_comm |> 
+  print(width=Inf, n=13)
+
+#' 
+#' 
+#' 
+## -------------------------------------------------------------------------------------------
+# Dataframe to iterate over for the analyses
+
+df_disease_comm_an <- tibble(
+  disease = unique(df_disease_model_comm$disease),
+  print_name = str_replace_all(disease, c(" "="-",
+                                          "/"="-",
+                                          "\\("="-",
+                                          "\\)"="-",
+                                          ","="-"))
+)
+
+# Add data filtered for each disease
+df_disease_comm_an <- df_disease_comm_an |> 
+  mutate(
+    df_model = map(disease, \(x) filter(df_disease_model_comm, disease==x))
+  )
+
+#' 
+#' 
+#' #### Plot the response
+#' 
+## -------------------------------------------------------------------------------------------
+# Step 1: Plot the response --------------------------------------------------------------
+
+pwalk(
+  df_disease_comm_an,
+  plot_response_disease
+)
+
+#' 
+#' 
+#' #### Fit model
+#' 
+#' 
+## -------------------------------------------------------------------------------------------
+# Step 2: Fit the model ----------------------------------------------------------------
+
+# Get number of basis functions for trend
+df_disease_comm_an <- df_disease_comm_an |> 
+  mutate(
+    k_trend = map(df_model, get_k_trend_disease)
+  )
+
+df_disease_comm_an[["k_trend"]]
+
+# Add distribution family of the response
+df_disease_comm_an <- df_disease_comm_an |> 
+  mutate(
+    family = list(mgcv::nb(link="log"))
+  )
+
+# Fit models
+df_disease_comm_an <- df_disease_comm_an |> 
+  mutate(
+    model = pmap(list(disease, df_model, k_trend, family), fit_descriptive_gam_disease)
+  )
+
+#' 
+#' 
+#' #### Check model
+#' 
+## -------------------------------------------------------------------------------------------
+# Step 3: Check the model --------------------------------------------------------------
+
+pwalk(
+  df_disease_comm_an,
+  check_gam_disease
+)
+
+#' 
+#' #### Get predictions
+#' 
+## -------------------------------------------------------------------------------------------
+# Step 4: Get predictions, as well as decomposition into trend, seasonal and residual ----
+
+# Get predictions and time series decomposition
+df_disease_comm_an <- df_disease_comm_an |> 
+  mutate(
+    pred_df = pmap(list(model=model, model_df=df_model, var="case_rate"), get_pred_ts_decomp)
+  )
+
+#' 
+#' 
+#' 
+#' #### Plot time series decomposition
+#' 
+## -------------------------------------------------------------------------------------------
+
+# Step 5: Plot time series decomposition -----------------------------------------------
+
+pwalk(
+  df_disease_comm_an,
+  plot_ts_decomp_disease
+)
+
+
+#' 
+#' 
+#' #### Make contrasts for the trend
+#' 
+## -------------------------------------------------------------------------------------------
+# Step 7: Make contrasts for the trend -------------------------------------------------
+# note: Standard errors and hypothesis tests computed with Delta method
+# (marginaleffects default)
+
+df_disease_comm_an <- df_disease_comm_an |> 
+  mutate(
+    contrast_res = pmap(list(model, disease, print_name, df_model), make_trend_contrasts_disease)
+  )
+
+# df_disease_comm_an[["contrast_res"]][[1]] |> print(width=Inf)
+
+#' 
+#' 
+#' 
+## -------------------------------------------------------------------------------------------
+# Prepare table for contrasts
+contrast_tbl_dis_raw <- df_disease_comm_an |> 
+  select(disease, contrast_res) |> 
+  unnest(contrast_res) |> 
+  select(disease, name, district, estimate, conf.low, conf.high, p.value) |> 
+  # If checking average trend, H0 = 0 not informative, so remove p.value
+  mutate(
+    p.value = if_else(name=="avg_trend", NA, p.value)
+  )
+
+# All constrasts
+contrast_tbl_dis_full <- prepare_contrast_table_full(contrast_tbl_dis_raw)
+
+contrast_tbl_dis_full
+
+# Save
+walk(
+  c("html", "tex", "docx"),
+  \(extension) gtsave(
+    contrast_tbl_dis_full,
+    file.path(res_path, "tables", glue("disease-communicable_contrasts_full.{extension}"))
+    )
+)
+
+# p.value < 0.05
+contrast_tbl_dis_filt <- prepare_contrast_table_filt(contrast_tbl_dis_raw)
+
+# Save
+walk(
+  c("html", "tex", "docx"),
+  \(extension) gtsave(
+    contrast_tbl_dis_filt,
+    file.path(res_path, "tables", glue("disease-communicable_contrasts_filt.{extension}"))
+    )
+)
+
+#' 
+#' 
+## -------------------------------------------------------------------------------------------
+# Save results
+save(
+  df_disease_comm_an,
+  df_disease_model_comm,
+  file = file.path(res_path, "R_output", "disease-communicable_descriptive.RData")
+)
+
+# load(
+#   file.path(res_path, "R_output", "disease_descriptive.RData")
+# )
+
+#' 
+#' 
+#' ### Per disease_group
+#' 
+## -------------------------------------------------------------------------------------------
+# Setup data
+df_disease <- read_csv(file.path(data_path, "processed", "disease_processed.csv"))
+pop_imp <- read_csv(file.path(data_path, "processed", "population_imputed.csv"))
+
+
+# Aggregate n_cases by disease_group status
+# Rename 'disease_group' to 'disease', to keep the rest of the code unchanged
+df_disease_model_group <- df_disease |> 
+  group_by(district, date, disease_group) |> 
+  summarise(
+    n_cases = sum(n_cases)
+  ) |> 
+  ungroup() |> 
+  rename(
+    disease = disease_group
+  )
+
+# Add population (2022 imputed) to disease dataframe
+df_disease_model_group <- df_disease_model_group |> 
+  mutate(year = year(date)) |> 
+  left_join(
+    mutate(pop_imp, year=year(date)),
+    join_by(district, year)
+  ) |> 
+  select(- c(year, date.y)) |> 
+  rename(date = date.x)
+
+# Compute incidence rate per 100k people
+df_disease_model_group <- df_disease_model_group |> 
+  mutate(case_rate = n_cases / population * 1e5)
+
+# Set up variables for modelling
+df_disease_model_group <- df_disease_model_group |> 
+  mutate(
+    time_ind = interval(min(date), date) / months(1) + 1,
+    month_ind = month(date),
+    district = factor(district, levels=c("Moshi", "Siha"))
+  )
+
+df_disease_model_group |> 
+  print(width=Inf, n=13)
+
+#' 
+#' 
+#' 
+## -------------------------------------------------------------------------------------------
+# Dataframe to iterate over for the analyses
+
+df_disease_group_an <- tibble(
+  disease = unique(df_disease_model_group$disease),
+  print_name = str_replace_all(disease, c(" "="-",
+                                          "/"="-",
+                                          "\\("="-",
+                                          "\\)"="-",
+                                          ","="-"))
+)
+
+df_disease_group_an <- df_disease_group_an |> 
+  mutate(
+    print_name = glue("Group_{print_name}")
+  )
+
+# Add data filtered for each disease
+df_disease_group_an <- df_disease_group_an |> 
+  mutate(
+    df_model = map(disease, \(x) filter(df_disease_model_group, disease==x))
+  )
+
+#' 
+#' 
+#' #### Plot the response
+#' 
+## -------------------------------------------------------------------------------------------
+# Step 1: Plot the response --------------------------------------------------------------
+
+pwalk(
+  df_disease_group_an,
+  plot_response_disease
+)
+
+#' 
+#' #### Fit model
+#' 
+#' 
+## -------------------------------------------------------------------------------------------
+# Step 2: Fit the model ----------------------------------------------------------------
+
+# Get number of basis functions for trend
+df_disease_group_an <- df_disease_group_an |> 
+  mutate(
+    k_trend = map(df_model, get_k_trend_disease)
+  )
+
+df_disease_group_an[["k_trend"]]
+
+# Add distribution family of the response
+df_disease_group_an <- df_disease_group_an |> 
+  mutate(
+    family = list(mgcv::nb(link="log"))
+  )
+
+# Fit models
+df_disease_group_an <- df_disease_group_an |> 
+  mutate(
+    model = pmap(list(disease, df_model, k_trend, family), fit_descriptive_gam_disease)
+  )
+
+#' 
+#' 
+#' #### Check model
+#' 
+## -------------------------------------------------------------------------------------------
+# Step 3: Check the model --------------------------------------------------------------
+
+pwalk(
+  df_disease_group_an,
+  check_gam_disease
+)
+
+#' 
+#' #### Get predictions
+#' 
+## -------------------------------------------------------------------------------------------
+# Step 4: Get predictions, as well as decomposition into trend, seasonal and residual ----
+
+# Get predictions and time series decomposition
+df_disease_group_an <- df_disease_group_an |> 
+  mutate(
+    pred_df = pmap(list(model=model, model_df=df_model, var="case_rate"), get_pred_ts_decomp)
+  )
+
+#' 
+#' 
+#' 
+#' #### Plot time series decomposition
+#' 
+## -------------------------------------------------------------------------------------------
+
+# Step 5: Plot time series decomposition -----------------------------------------------
+
+pwalk(
+  df_disease_group_an,
+  plot_ts_decomp_disease
+)
+
+#' 
+#' 
+#' #### Make contrasts for the trend
+#' 
+## -------------------------------------------------------------------------------------------
+# Step 7: Make contrasts for the trend -------------------------------------------------
+# note: Standard errors and hypothesis tests computed with Delta method
+# (marginaleffects default)
+
+df_disease_group_an <- df_disease_group_an |> 
+  mutate(
+    contrast_res = pmap(list(model, disease, print_name, df_model), make_trend_contrasts_disease)
+  )
+
+# df_disease_group_an[["contrast_res"]][[1]] |> print(width=Inf)
+
+#' 
+#' 
+#' 
+## -------------------------------------------------------------------------------------------
+# Prepare table for contrasts
+contrast_tbl_dis_raw <- df_disease_group_an |> 
+  select(disease, contrast_res) |> 
+  unnest(contrast_res) |> 
+  select(disease, name, district, estimate, conf.low, conf.high, p.value) |> 
+  # If checking average trend, H0 = 0 not informative, so remove p.value
+  mutate(
+    p.value = if_else(name=="avg_trend", NA, p.value)
+  )
+
+# All constrasts
+contrast_tbl_dis_full <- prepare_contrast_table_full(contrast_tbl_dis_raw)
+
+contrast_tbl_dis_full
+
+# Save
+walk(
+  c("html", "tex", "docx"),
+  \(extension) gtsave(
+    contrast_tbl_dis_full,
+    file.path(res_path, "tables", glue("disease-group_contrasts_full.{extension}"))
+    )
+)
+
+# p.value < 0.05
+contrast_tbl_dis_filt <- prepare_contrast_table_filt(contrast_tbl_dis_raw)
+
+# Save
+walk(
+  c("html", "tex", "docx"),
+  \(extension) gtsave(
+    contrast_tbl_dis_filt,
+    file.path(res_path, "tables", glue("disease-group_contrasts_filt.{extension}"))
+    )
+)
+
+#' 
+#' 
+## -------------------------------------------------------------------------------------------
+# Save results
+save(
+  df_disease_comm_an,
+  df_disease_model_comm,
+  file = file.path(res_path, "R_output", "disease-group_descriptive.RData")
+)
+
+# load(
+#   file.path(res_path, "R_output", "disease_descriptive.RData")
+# )
+
+#' 

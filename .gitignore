@@ -25,3 +25,7 @@ venv/
 # Others
 /old_code
 /.quarto/
+
+# Quarto cache
+*_files/
+*_cache/
