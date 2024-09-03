@@ -2804,12 +2804,12 @@ prepare_contrast_table_full <- function(contrast_tbl_dis_raw) {
         "avg_yearly_trend_slope_diff" ~ "Average yearly trend change",
         "avg_trend" ~ "Average trend level",
         "avg_trend_diff" ~ "Average trend level",
-        "temp_trend_diff" ~ "Trend difference (2012-01 to 2021-12)",
-        "temp_trend_diff_diff" ~ "Trend difference (2012-01 to 2021-12)",
+        "temp_trend_diff" ~ "Trend difference (2014-01 to 2022-12)",
+        "temp_trend_diff_diff" ~ "Trend difference (2014-01 to 2022-12)",
       ),
       Contrast = factor(
         Contrast, levels=c("Average trend level", "Average yearly trend change",
-                           "Trend difference (2012-01 to 2021-12)")
+                           "Trend difference (2014-01 to 2022-12)")
       ),
       District = if_else(is.na(district), "Siha - Moshi", district),
       `Estimate (95% CI)` = glue("{round(estimate, 3)} ({round(conf.low, 3)}, {round(conf.high, 3)})"),
@@ -2854,12 +2854,12 @@ prepare_contrast_table_filt <- function(contrast_tbl_dis_raw) {
         "avg_yearly_trend_slope_diff" ~ "Average yearly trend change",
         "avg_trend" ~ "Average trend level",
         "avg_trend_diff" ~ "Average trend level",
-        "temp_trend_diff" ~ "Trend difference (2012-01 to 2021-12)",
-        "temp_trend_diff_diff" ~ "Trend difference (2012-01 to 2021-12)",
+        "temp_trend_diff" ~ "Trend difference (2014-01 to 2022-12)",
+        "temp_trend_diff_diff" ~ "Trend difference (2014-01 to 2022-12)",
       ),
       Contrast = factor(
         Contrast, levels=c("Average trend level", "Average yearly trend change",
-                           "Trend difference (2012-01 to 2021-12)")
+                           "Trend difference (2014-01 to 2022-12)")
       ),
       District = if_else(is.na(district), "Siha - Moshi", district),
       `Estimate (95% CI)` = glue("{round(estimate, 3)} ({round(conf.low, 3)}, {round(conf.high, 3)})"),
@@ -3071,6 +3071,7 @@ df_disease_comm_an <- df_disease_comm_an |>
 
 
 ```{r}
+
 # Prepare table for contrasts
 contrast_tbl_dis_raw <- df_disease_comm_an |> 
   select(disease, contrast_res) |> 
@@ -3291,6 +3292,7 @@ df_disease_group_an <- df_disease_group_an |>
 
 
 ```{r}
+
 # Prepare table for contrasts
 contrast_tbl_dis_raw <- df_disease_group_an |> 
   select(disease, contrast_res) |> 
