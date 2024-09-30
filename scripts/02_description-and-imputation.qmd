@@ -2835,7 +2835,7 @@ contrast_tbl_dis_raw <- df_disease_an |>
   )
 
 # All constrasts
-prepare_contrast_table_full <- function(contrast_tbl_dis_raw) {
+prepare_contrast_table_full <- function(contrast_tbl_dis_raw, date_range_contrast_label="(2014-01 to 2022-12)") {
   contrast_tbl_dis_raw |> 
     mutate(
       Contrast = case_match(
@@ -2844,12 +2844,12 @@ prepare_contrast_table_full <- function(contrast_tbl_dis_raw) {
         "avg_yearly_trend_slope_diff" ~ "Average yearly trend change",
         "avg_trend" ~ "Average trend level",
         "avg_trend_diff" ~ "Average trend level",
-        "temp_trend_diff" ~ "Trend difference (2014-01 to 2022-12)",
-        "temp_trend_diff_diff" ~ "Trend difference (2014-01 to 2022-12)",
+        "temp_trend_diff" ~ glue("Trend difference {date_range_contrast_label}"),
+        "temp_trend_diff_diff" ~ glue("Trend difference {date_range_contrast_label}"),
       ),
       Contrast = factor(
         Contrast, levels=c("Average trend level", "Average yearly trend change",
-                           "Trend difference (2014-01 to 2022-12)")
+                           glue("Trend difference {date_range_contrast_label}"))
       ),
       District = if_else(is.na(district), "Siha - Moshi", district),
       `Estimate (95% CI)` = glue("{round(estimate, 3)} ({round(conf.low, 3)}, {round(conf.high, 3)})"),
@@ -2870,7 +2870,8 @@ prepare_contrast_table_full <- function(contrast_tbl_dis_raw) {
 }
 
 
-contrast_tbl_dis_full <- prepare_contrast_table_full(contrast_tbl_dis_raw)
+contrast_tbl_dis_full <- prepare_contrast_table_full(contrast_tbl_dis_raw,
+                                                     date_range_contrast_label="(2014-01 to 2022-12)")
 
 contrast_tbl_dis_full
 
@@ -2885,7 +2886,7 @@ walk(
 )
 
 # p.value < 0.05
-prepare_contrast_table_filt <- function(contrast_tbl_dis_raw) {
+prepare_contrast_table_filt <- function(contrast_tbl_dis_raw, date_range_contrast_label="(2014-01 to 2022-12)") {
   contrast_tbl_dis_raw |>
     filter(p.value < 0.05) |> 
     mutate(
@@ -2895,12 +2896,12 @@ prepare_contrast_table_filt <- function(contrast_tbl_dis_raw) {
         "avg_yearly_trend_slope_diff" ~ "Average yearly trend change",
         "avg_trend" ~ "Average trend level",
         "avg_trend_diff" ~ "Average trend level",
-        "temp_trend_diff" ~ "Trend difference (2014-01 to 2022-12)",
-        "temp_trend_diff_diff" ~ "Trend difference (2014-01 to 2022-12)",
+        "temp_trend_diff" ~ glue("Trend difference {date_range_contrast_label}"),
+        "temp_trend_diff_diff" ~ glue("Trend difference {date_range_contrast_label}"),
       ),
       Contrast = factor(
         Contrast, levels=c("Average trend level", "Average yearly trend change",
-                           "Trend difference (2014-01 to 2022-12)")
+                           glue("Trend difference {date_range_contrast_label}"))
       ),
       District = if_else(is.na(district), "Siha - Moshi", district),
       `Estimate (95% CI)` = glue("{round(estimate, 3)} ({round(conf.low, 3)}, {round(conf.high, 3)})"),
@@ -2920,7 +2921,8 @@ prepare_contrast_table_filt <- function(contrast_tbl_dis_raw) {
     cols_align(align = "left", columns = "Contrast")
 }
 
-contrast_tbl_dis_filt <- prepare_contrast_table_filt(contrast_tbl_dis_raw)
+contrast_tbl_dis_filt <- prepare_contrast_table_filt(contrast_tbl_dis_raw,
+                                                     date_range_contrast_label="(2014-01 to 2022-12)")
 
 # Save
 walk(
@@ -3134,7 +3136,8 @@ contrast_tbl_dis_raw <- df_disease_comm_an |>
   )
 
 # All constrasts
-contrast_tbl_dis_full <- prepare_contrast_table_full(contrast_tbl_dis_raw)
+contrast_tbl_dis_full <- prepare_contrast_table_full(contrast_tbl_dis_raw,
+                                                     date_range_contrast_label="(2014-01 to 2022-12)")
 
 contrast_tbl_dis_full
 
@@ -3150,7 +3153,8 @@ walk(
 )
 
 # p.value < 0.05
-contrast_tbl_dis_filt <- prepare_contrast_table_filt(contrast_tbl_dis_raw)
+contrast_tbl_dis_filt <- prepare_contrast_table_filt(contrast_tbl_dis_raw,
+                                                     date_range_contrast_label="(2014-01 to 2022-12)")
 
 # Save
 walk(
@@ -3175,7 +3179,7 @@ save(
 )
 
 # load(
-#   file.path(res_path, "R_output", "2014_onwards", "disease_descriptive.RData")
+#   file.path(res_path, "R_output", "2014_onwards", "disease-communicable_descriptive.RData")
 # )
 ```
 
@@ -3369,7 +3373,8 @@ contrast_tbl_dis_raw <- df_disease_group_an |>
   )
 
 # All constrasts
-contrast_tbl_dis_full <- prepare_contrast_table_full(contrast_tbl_dis_raw)
+contrast_tbl_dis_full <- prepare_contrast_table_full(contrast_tbl_dis_raw,
+                                                     date_range_contrast_label="(2014-01 to 2022-12)")
 
 contrast_tbl_dis_full
 
@@ -3385,7 +3390,8 @@ walk(
 )
 
 # p.value < 0.05
-contrast_tbl_dis_filt <- prepare_contrast_table_filt(contrast_tbl_dis_raw)
+contrast_tbl_dis_filt <- prepare_contrast_table_filt(contrast_tbl_dis_raw,
+                                                     date_range_contrast_label="(2014-01 to 2022-12)")
 
 # Save
 walk(
@@ -3403,15 +3409,15 @@ walk(
 ```{r}
 # Save results
 save(
-  df_disease_comm_an,
-  df_disease_model_comm,
+  df_disease_group_an,
+  df_disease_model_group,
   file = file.path(res_path, "R_output",
                    "2014_onwards",
                    "disease-group_descriptive.RData")
 )
 
 # load(
-#   file.path(res_path, "R_output", "2014_onwards", "disease_descriptive.RData")
+#   file.path(res_path, "R_output", "2014_onwards", "disease-group_descriptive.RData")
 # )
 ```
 
@@ -3618,7 +3624,8 @@ contrast_tbl_dis_raw <- df_disease_an |>
   )
 
 # All constrasts
-contrast_tbl_dis_full <- prepare_contrast_table_full(contrast_tbl_dis_raw)
+contrast_tbl_dis_full <- prepare_contrast_table_full(contrast_tbl_dis_raw,
+                                                     date_range_contrast_label="(2015-01 to 2022-12)")
 
 contrast_tbl_dis_full
 
@@ -3633,7 +3640,8 @@ walk(
 )
 
 # p.value < 0.05
-contrast_tbl_dis_filt <- prepare_contrast_table_filt(contrast_tbl_dis_raw)
+contrast_tbl_dis_filt <- prepare_contrast_table_filt(contrast_tbl_dis_raw,
+                                                     date_range_contrast_label="(2015-01 to 2022-12)")
 
 # Save
 walk(
@@ -3849,7 +3857,8 @@ contrast_tbl_dis_raw <- df_disease_comm_an |>
   )
 
 # All constrasts
-contrast_tbl_dis_full <- prepare_contrast_table_full(contrast_tbl_dis_raw)
+contrast_tbl_dis_full <- prepare_contrast_table_full(contrast_tbl_dis_raw,
+                                                     date_range_contrast_label="(2015-01 to 2022-12)")
 
 contrast_tbl_dis_full
 
@@ -3865,7 +3874,8 @@ walk(
 )
 
 # p.value < 0.05
-contrast_tbl_dis_filt <- prepare_contrast_table_filt(contrast_tbl_dis_raw)
+contrast_tbl_dis_filt <- prepare_contrast_table_filt(contrast_tbl_dis_raw,
+                                                     date_range_contrast_label="(2015-01 to 2022-12)")
 
 # Save
 walk(
@@ -3890,7 +3900,7 @@ save(
 )
 
 # load(
-#   file.path(res_path, "R_output", "2015_onwards", "disease_descriptive.RData")
+#   file.path(res_path, "R_output", "2015_onwards", "disease-communicable_descriptive.RData")
 # )
 ```
 
@@ -4086,7 +4096,8 @@ contrast_tbl_dis_raw <- df_disease_group_an |>
   )
 
 # All constrasts
-contrast_tbl_dis_full <- prepare_contrast_table_full(contrast_tbl_dis_raw)
+contrast_tbl_dis_full <- prepare_contrast_table_full(contrast_tbl_dis_raw,
+                                                     date_range_contrast_label="(2015-01 to 2022-12)")
 
 contrast_tbl_dis_full
 
@@ -4102,7 +4113,8 @@ walk(
 )
 
 # p.value < 0.05
-contrast_tbl_dis_filt <- prepare_contrast_table_filt(contrast_tbl_dis_raw)
+contrast_tbl_dis_filt <- prepare_contrast_table_filt(contrast_tbl_dis_raw,
+                                                     date_range_contrast_label="(2015-01 to 2022-12)")
 
 # Save
 walk(
@@ -4120,15 +4132,15 @@ walk(
 ```{r}
 # Save results
 save(
-  df_disease_comm_an,
-  df_disease_model_comm,
+  df_disease_group_an,
+  df_disease_model_group,
   file = file.path(res_path, "R_output",
                    "2015_onwards",
                    "disease-group_descriptive.RData")
 )
 
 # load(
-#   file.path(res_path, "R_output", "2015_onwards", "disease_descriptive.RData")
+#   file.path(res_path, "R_output", "2015_onwards", "disease-group_descriptive.RData")
 # )
 ```
 

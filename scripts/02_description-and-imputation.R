@@ -22,7 +22,7 @@
 #' 
 #' # Setup
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 library(tidyverse)
 theme_set(theme_bw(base_size = 16))
 
@@ -39,7 +39,7 @@ library(marginaleffects)  # model interpretation
 
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 base_path <- ".."
 data_path <- file.path(base_path, "data")
 res_path <- file.path(base_path, "results")
@@ -51,7 +51,7 @@ res_path <- file.path(base_path, "results")
 #' 
 #' # Population
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Load
 pop <- read_csv(file.path(data_path, "processed", "population.csv"))
 
@@ -89,7 +89,7 @@ ggsave(
 #' 
 #' Population has been increasing linearly year by year. Imputing the population of 2022 with a linear prediction seems appropriate.
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Get time index for regression
 pop_reg <- pop |> 
   mutate(year=year(date))
@@ -178,7 +178,7 @@ rm(fit, newdata, pop_reg)
 #' We will fit GAMs to decompose the environmental time series into trend and seasonal components. These models will be used to impute observations in the year range between 2014-2021, to make possible the posterior regression analyses.
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 df_environ <- read_csv(file.path(data_path, "processed", "environmental.csv"))
 
 # Prepare data for modelling
@@ -194,7 +194,7 @@ df_environ_model |>
 
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 df_environ_model
 
 # Create dataframe for analysis
@@ -217,7 +217,7 @@ df_environ_an
 #' 
 #' ## Plot the response
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 
 # Step 1: Plot the response --------------------------------------------------------------
 
@@ -281,7 +281,7 @@ walk2(
 #' 
 #' ## Fit model
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 2: Fit the model ----------------------------------------------------------------
 
 # Penalized GAM
@@ -358,7 +358,7 @@ df_environ_an <- df_environ_an |>
 #' 
 #' ## Check model
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 3: Check the model --------------------------------------------------------------
 
 pwalk(
@@ -395,7 +395,7 @@ pwalk(
 #' 
 #' ## Get predictions
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 4: Get predictions, as well as decomposition into trend, seasonal and residual ----
 
 # Get predictions and time series decomposition
@@ -485,7 +485,7 @@ df_environ_an <- df_environ_an |>
 #' 
 #' ## Plot time series decomposition
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 5: Plot time series decomposition -----------------------------------------------
 
 # df_environ_an$pred_df[[1]] |> colnames()
@@ -676,7 +676,7 @@ pwalk(
 #' 
 #' ## Get imputations
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 6: Get imputations needed for the regression model --------------------------------
 # Full observations in year range 2014-2022
 
@@ -785,7 +785,7 @@ write_csv(
 #' 
 #' ## Make contrasts for the trend
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 7: Make contrasts for the trend -------------------------------------------------
 # note: Standard errors and hypothesis tests computed with Delta method
 # (marginaleffects default)
@@ -1120,7 +1120,7 @@ df_environ_an <- df_environ_an |>
 
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Prepare table for contrasts
 contrast_tbl_raw <- df_environ_an |> 
   select(var, label, units, contrast_res) |> 
@@ -1225,7 +1225,7 @@ walk(
 
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Save results
 save(
   df_environ_an,
@@ -1243,7 +1243,7 @@ save(
 #' 
 #' ## Prepare data
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 df_disease <- read_csv(file.path(data_path, "processed", "disease.csv"))
 
 # Rename diseases
@@ -1257,7 +1257,7 @@ df_disease <- df_disease |>
   )
 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Add population (2022 imputed) to disease dataframe
 df_disease_model <- df_disease |> 
   mutate(year = year(date)) |> 
@@ -1287,7 +1287,7 @@ df_disease_model |>
 #' 
 #' ### Disease groupings
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 
 # Re-define disease groupings according to Renz and Skevaki notations
 # Type manually
@@ -1365,7 +1365,7 @@ ref_renz |>
 
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Skevaki
 
 ref_skevaki_block <- tribble(
@@ -1519,7 +1519,7 @@ rm(ref_skevaki_block, ref_skevaki_group)
 
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Final grouping (after discussion)
 
 ref_final_block <- tribble(
@@ -1685,7 +1685,7 @@ rm(ref_final_block, ref_final_group)
 
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Add new disease grouping to model table
 
 df_disease_model_explore <- df_disease_model |> 
@@ -1698,7 +1698,7 @@ df_disease_model_explore <- df_disease_model |>
 #' 
 #' Explore disease incidence rates and the different disease groupings.
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Original disease classification
 
 
@@ -1766,7 +1766,7 @@ ggsave(
 
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Original groups again, but remove category with many missings
 
 df_disease_model_explore |> 
@@ -1790,7 +1790,7 @@ ggsave(
 
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 
 # Skevaki groups
 
@@ -1807,7 +1807,7 @@ ggsave(
 
 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Renz groups
 
 df_disease_model_explore |> 
@@ -1823,7 +1823,7 @@ ggsave(
 
 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Final groups
 
 df_disease_model_explore |> 
@@ -1841,7 +1841,7 @@ ggsave(
 #' 
 #' #### Plot all incidence rate time series
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 df_disease_iter1 <- tibble(
   disease = unique(df_disease_model$disease),
   print_name = str_replace_all(disease, c(" "="-",
@@ -1899,7 +1899,7 @@ pwalk(
 #' 
 #' Use final grouping and filter out diseases according to clinical input, and also if there are many missing values or the incidence rate is too low.
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Remove old grouping and replace by the final one
 df_disease_model <- df_disease_model |> 
   left_join(ref_final) |> 
@@ -1910,7 +1910,7 @@ df_disease_model <- df_disease_model |>
   )
 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Remove diseases with no assigned group
 df_disease_model |> 
   filter(is.na(disease_group)) |> 
@@ -1990,7 +1990,7 @@ df_disease_model <- bind_rows(
 rm(df_disease_model_diarrhea)
 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Check initial disease filtering and aggregation
 
 df_disease_model |> 
@@ -2003,7 +2003,7 @@ ggsave(
 
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Remove other diseases with missings
 # - Cholera
 # - Rabies
@@ -2024,7 +2024,7 @@ ggsave(
 
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Filter diseases according to incidence rate
 
 # We have 1 missing for Typhoid, but that's it
@@ -2062,7 +2062,7 @@ ggsave(
 #' ### Save processed disease data
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # df_disease_model |> 
 #   pull(disease) |> 
 #   unique() |> 
@@ -2093,7 +2093,7 @@ df_disease_model |>
 #' 
 #' ### Per disease
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Setup data
 df_disease <- read_csv(file.path(data_path, "processed", "disease_processed.csv"))
 pop_imp <- read_csv(file.path(data_path, "processed", "population_imputed.csv"))
@@ -2126,7 +2126,7 @@ df_disease_model |>
 
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Dataframe to iterate over for the analyses
 
 df_disease_an <- tibble(
@@ -2148,7 +2148,7 @@ df_disease_an <- df_disease_an |>
 #' 
 #' #### Plot the response
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 1: Plot the response --------------------------------------------------------------
 
 # Redo the incidence rate plots after disease filtering
@@ -2205,7 +2205,7 @@ pwalk(
 #' #### Fit model
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 2: Fit the model ----------------------------------------------------------------
 
 # Get number of basis functions for trend
@@ -2267,7 +2267,7 @@ df_disease_an <- df_disease_an |>
 #' 
 #' #### Check model
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 3: Check the model --------------------------------------------------------------
 
 check_gam_disease <- function(disease, print_name, model,
@@ -2310,7 +2310,7 @@ pwalk(
 #' 
 #' #### Get predictions
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 4: Get predictions, as well as decomposition into trend, seasonal and residual ----
 
 # Get predictions and time series decomposition
@@ -2324,7 +2324,7 @@ df_disease_an <- df_disease_an |>
 #' 
 #' #### Plot time series decomposition
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 
 # Step 5: Plot time series decomposition -----------------------------------------------
 
@@ -2482,7 +2482,7 @@ pwalk(
 #' 
 #' #### Make contrasts for the trend
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 7: Make contrasts for the trend -------------------------------------------------
 # note: Standard errors and hypothesis tests computed with Delta method
 # (marginaleffects default)
@@ -2807,7 +2807,7 @@ make_trend_contrasts_disease <- function(model, disease, print_name, df_model,
 
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 df_disease_an <- df_disease_an |> 
   mutate(
     contrast_res = pmap(
@@ -2823,7 +2823,7 @@ df_disease_an <- df_disease_an |>
 
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Prepare table for contrasts
 contrast_tbl_dis_raw <- df_disease_an |> 
   select(disease, contrast_res) |> 
@@ -2835,7 +2835,7 @@ contrast_tbl_dis_raw <- df_disease_an |>
   )
 
 # All constrasts
-prepare_contrast_table_full <- function(contrast_tbl_dis_raw) {
+prepare_contrast_table_full <- function(contrast_tbl_dis_raw, date_range_contrast_label="(2014-01 to 2022-12)") {
   contrast_tbl_dis_raw |> 
     mutate(
       Contrast = case_match(
@@ -2844,12 +2844,12 @@ prepare_contrast_table_full <- function(contrast_tbl_dis_raw) {
         "avg_yearly_trend_slope_diff" ~ "Average yearly trend change",
         "avg_trend" ~ "Average trend level",
         "avg_trend_diff" ~ "Average trend level",
-        "temp_trend_diff" ~ "Trend difference (2014-01 to 2022-12)",
-        "temp_trend_diff_diff" ~ "Trend difference (2014-01 to 2022-12)",
+        "temp_trend_diff" ~ glue("Trend difference {date_range_contrast_label}"),
+        "temp_trend_diff_diff" ~ glue("Trend difference {date_range_contrast_label}"),
       ),
       Contrast = factor(
         Contrast, levels=c("Average trend level", "Average yearly trend change",
-                           "Trend difference (2014-01 to 2022-12)")
+                           glue("Trend difference {date_range_contrast_label}"))
       ),
       District = if_else(is.na(district), "Siha - Moshi", district),
       `Estimate (95% CI)` = glue("{round(estimate, 3)} ({round(conf.low, 3)}, {round(conf.high, 3)})"),
@@ -2870,7 +2870,8 @@ prepare_contrast_table_full <- function(contrast_tbl_dis_raw) {
 }
 
 
-contrast_tbl_dis_full <- prepare_contrast_table_full(contrast_tbl_dis_raw)
+contrast_tbl_dis_full <- prepare_contrast_table_full(contrast_tbl_dis_raw,
+                                                     date_range_contrast_label="(2014-01 to 2022-12)")
 
 contrast_tbl_dis_full
 
@@ -2885,7 +2886,7 @@ walk(
 )
 
 # p.value < 0.05
-prepare_contrast_table_filt <- function(contrast_tbl_dis_raw) {
+prepare_contrast_table_filt <- function(contrast_tbl_dis_raw, date_range_contrast_label="(2014-01 to 2022-12)") {
   contrast_tbl_dis_raw |>
     filter(p.value < 0.05) |> 
     mutate(
@@ -2895,12 +2896,12 @@ prepare_contrast_table_filt <- function(contrast_tbl_dis_raw) {
         "avg_yearly_trend_slope_diff" ~ "Average yearly trend change",
         "avg_trend" ~ "Average trend level",
         "avg_trend_diff" ~ "Average trend level",
-        "temp_trend_diff" ~ "Trend difference (2014-01 to 2022-12)",
-        "temp_trend_diff_diff" ~ "Trend difference (2014-01 to 2022-12)",
+        "temp_trend_diff" ~ glue("Trend difference {date_range_contrast_label}"),
+        "temp_trend_diff_diff" ~ glue("Trend difference {date_range_contrast_label}"),
       ),
       Contrast = factor(
         Contrast, levels=c("Average trend level", "Average yearly trend change",
-                           "Trend difference (2014-01 to 2022-12)")
+                           glue("Trend difference {date_range_contrast_label}"))
       ),
       District = if_else(is.na(district), "Siha - Moshi", district),
       `Estimate (95% CI)` = glue("{round(estimate, 3)} ({round(conf.low, 3)}, {round(conf.high, 3)})"),
@@ -2920,7 +2921,8 @@ prepare_contrast_table_filt <- function(contrast_tbl_dis_raw) {
     cols_align(align = "left", columns = "Contrast")
 }
 
-contrast_tbl_dis_filt <- prepare_contrast_table_filt(contrast_tbl_dis_raw)
+contrast_tbl_dis_filt <- prepare_contrast_table_filt(contrast_tbl_dis_raw,
+                                                     date_range_contrast_label="(2014-01 to 2022-12)")
 
 # Save
 walk(
@@ -2934,7 +2936,7 @@ walk(
 
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Save results
 save(
   df_disease_an,
@@ -2951,7 +2953,7 @@ save(
 #' 
 #' ### Per disease_communicable
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Setup data
 df_disease <- read_csv(file.path(data_path, "processed", "disease_processed.csv"))
 pop_imp <- read_csv(file.path(data_path, "processed", "population_imputed.csv"))
@@ -2997,7 +2999,7 @@ df_disease_model_comm |>
 #' 
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Dataframe to iterate over for the analyses
 
 df_disease_comm_an <- tibble(
@@ -3019,7 +3021,7 @@ df_disease_comm_an <- df_disease_comm_an |>
 #' 
 #' #### Plot the response
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 1: Plot the response --------------------------------------------------------------
 
 pwalk(
@@ -3033,7 +3035,7 @@ pwalk(
 #' #### Fit model
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 2: Fit the model ----------------------------------------------------------------
 
 # Get number of basis functions for trend
@@ -3060,7 +3062,7 @@ df_disease_comm_an <- df_disease_comm_an |>
 #' 
 #' #### Check model
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 3: Check the model --------------------------------------------------------------
 
 pwalk(
@@ -3072,7 +3074,7 @@ pwalk(
 #' 
 #' #### Get predictions
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 4: Get predictions, as well as decomposition into trend, seasonal and residual ----
 
 # Get predictions and time series decomposition
@@ -3086,7 +3088,7 @@ df_disease_comm_an <- df_disease_comm_an |>
 #' 
 #' #### Plot time series decomposition
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 
 # Step 5: Plot time series decomposition -----------------------------------------------
 
@@ -3101,7 +3103,7 @@ pwalk(
 #' 
 #' #### Make contrasts for the trend
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 7: Make contrasts for the trend -------------------------------------------------
 # note: Standard errors and hypothesis tests computed with Delta method
 # (marginaleffects default)
@@ -3121,7 +3123,7 @@ df_disease_comm_an <- df_disease_comm_an |>
 #' 
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 
 # Prepare table for contrasts
 contrast_tbl_dis_raw <- df_disease_comm_an |> 
@@ -3134,7 +3136,8 @@ contrast_tbl_dis_raw <- df_disease_comm_an |>
   )
 
 # All constrasts
-contrast_tbl_dis_full <- prepare_contrast_table_full(contrast_tbl_dis_raw)
+contrast_tbl_dis_full <- prepare_contrast_table_full(contrast_tbl_dis_raw,
+                                                     date_range_contrast_label="(2014-01 to 2022-12)")
 
 contrast_tbl_dis_full
 
@@ -3150,7 +3153,8 @@ walk(
 )
 
 # p.value < 0.05
-contrast_tbl_dis_filt <- prepare_contrast_table_filt(contrast_tbl_dis_raw)
+contrast_tbl_dis_filt <- prepare_contrast_table_filt(contrast_tbl_dis_raw,
+                                                     date_range_contrast_label="(2014-01 to 2022-12)")
 
 # Save
 walk(
@@ -3165,7 +3169,7 @@ walk(
 
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Save results
 save(
   df_disease_comm_an,
@@ -3175,14 +3179,14 @@ save(
 )
 
 # load(
-#   file.path(res_path, "R_output", "2014_onwards", "disease_descriptive.RData")
+#   file.path(res_path, "R_output", "2014_onwards", "disease-communicable_descriptive.RData")
 # )
 
 #' 
 #' 
 #' ### Per disease_group
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Setup data
 df_disease <- read_csv(file.path(data_path, "processed", "disease_processed.csv"))
 pop_imp <- read_csv(file.path(data_path, "processed", "population_imputed.csv"))
@@ -3229,7 +3233,7 @@ df_disease_model_group |>
 #' 
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Dataframe to iterate over for the analyses
 
 df_disease_group_an <- tibble(
@@ -3256,7 +3260,7 @@ df_disease_group_an <- df_disease_group_an |>
 #' 
 #' #### Plot the response
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 1: Plot the response --------------------------------------------------------------
 
 pwalk(
@@ -3269,7 +3273,7 @@ pwalk(
 #' #### Fit model
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 2: Fit the model ----------------------------------------------------------------
 
 # Get number of basis functions for trend
@@ -3296,7 +3300,7 @@ df_disease_group_an <- df_disease_group_an |>
 #' 
 #' #### Check model
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 3: Check the model --------------------------------------------------------------
 
 pwalk(
@@ -3308,7 +3312,7 @@ pwalk(
 #' 
 #' #### Get predictions
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 4: Get predictions, as well as decomposition into trend, seasonal and residual ----
 
 # Get predictions and time series decomposition
@@ -3322,7 +3326,7 @@ df_disease_group_an <- df_disease_group_an |>
 #' 
 #' #### Plot time series decomposition
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 
 # Step 5: Plot time series decomposition -----------------------------------------------
 
@@ -3336,7 +3340,7 @@ pwalk(
 #' 
 #' #### Make contrasts for the trend
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 7: Make contrasts for the trend -------------------------------------------------
 # note: Standard errors and hypothesis tests computed with Delta method
 # (marginaleffects default)
@@ -3356,7 +3360,7 @@ df_disease_group_an <- df_disease_group_an |>
 #' 
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 
 # Prepare table for contrasts
 contrast_tbl_dis_raw <- df_disease_group_an |> 
@@ -3369,7 +3373,8 @@ contrast_tbl_dis_raw <- df_disease_group_an |>
   )
 
 # All constrasts
-contrast_tbl_dis_full <- prepare_contrast_table_full(contrast_tbl_dis_raw)
+contrast_tbl_dis_full <- prepare_contrast_table_full(contrast_tbl_dis_raw,
+                                                     date_range_contrast_label="(2014-01 to 2022-12)")
 
 contrast_tbl_dis_full
 
@@ -3385,7 +3390,8 @@ walk(
 )
 
 # p.value < 0.05
-contrast_tbl_dis_filt <- prepare_contrast_table_filt(contrast_tbl_dis_raw)
+contrast_tbl_dis_filt <- prepare_contrast_table_filt(contrast_tbl_dis_raw,
+                                                     date_range_contrast_label="(2014-01 to 2022-12)")
 
 # Save
 walk(
@@ -3400,18 +3406,18 @@ walk(
 
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Save results
 save(
-  df_disease_comm_an,
-  df_disease_model_comm,
+  df_disease_group_an,
+  df_disease_model_group,
   file = file.path(res_path, "R_output",
                    "2014_onwards",
                    "disease-group_descriptive.RData")
 )
 
 # load(
-#   file.path(res_path, "R_output", "2014_onwards", "disease_descriptive.RData")
+#   file.path(res_path, "R_output", "2014_onwards", "disease-group_descriptive.RData")
 # )
 
 #' 
@@ -3424,7 +3430,7 @@ save(
 #' 
 #' ### Per disease
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Setup data
 
 # Filtered year 2014
@@ -3458,7 +3464,7 @@ df_disease_model <- df_disease_model |>
 #' 
 #' ##### Repeat incidence rate heatmap
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 df_disease_model |> 
   plot_disease_table(group_over = disease_communicable, group_under = disease_group)
 
@@ -3470,7 +3476,7 @@ ggsave(
 
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Dataframe to iterate over for the analyses
 
 df_disease_an <- tibble(
@@ -3493,7 +3499,7 @@ df_disease_an <- df_disease_an |>
 #' 
 #' #### Plot the response
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 1: Plot the response --------------------------------------------------------------
 
 # Redo the incidence rate plots after disease filtering
@@ -3510,7 +3516,7 @@ pwalk(
 #' #### Fit model
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 2: Fit the model ----------------------------------------------------------------
 
 # Get number of basis functions for trend
@@ -3537,7 +3543,7 @@ df_disease_an <- df_disease_an |>
 #' 
 #' #### Check model
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 3: Check the model --------------------------------------------------------------
 
 pwalk(
@@ -3551,7 +3557,7 @@ pwalk(
 #' 
 #' #### Get predictions
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 4: Get predictions, as well as decomposition into trend, seasonal and residual ----
 
 # Get predictions and time series decomposition
@@ -3565,7 +3571,7 @@ df_disease_an <- df_disease_an |>
 #' 
 #' #### Plot time series decomposition
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 
 # Step 5: Plot time series decomposition -----------------------------------------------
 
@@ -3580,7 +3586,7 @@ pwalk(
 #' 
 #' #### Make contrasts for the trend
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 7: Make contrasts for the trend -------------------------------------------------
 # note: Standard errors and hypothesis tests computed with Delta method
 # (marginaleffects default)
@@ -3606,7 +3612,7 @@ df_disease_an <- df_disease_an |>
 
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Prepare table for contrasts
 contrast_tbl_dis_raw <- df_disease_an |> 
   select(disease, contrast_res) |> 
@@ -3618,7 +3624,8 @@ contrast_tbl_dis_raw <- df_disease_an |>
   )
 
 # All constrasts
-contrast_tbl_dis_full <- prepare_contrast_table_full(contrast_tbl_dis_raw)
+contrast_tbl_dis_full <- prepare_contrast_table_full(contrast_tbl_dis_raw,
+                                                     date_range_contrast_label="(2015-01 to 2022-12)")
 
 contrast_tbl_dis_full
 
@@ -3633,7 +3640,8 @@ walk(
 )
 
 # p.value < 0.05
-contrast_tbl_dis_filt <- prepare_contrast_table_filt(contrast_tbl_dis_raw)
+contrast_tbl_dis_filt <- prepare_contrast_table_filt(contrast_tbl_dis_raw,
+                                                     date_range_contrast_label="(2015-01 to 2022-12)")
 
 # Save
 walk(
@@ -3647,7 +3655,7 @@ walk(
 
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Save results
 save(
   df_disease_an,
@@ -3664,7 +3672,7 @@ save(
 #' 
 #' ### Per disease_communicable
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Setup data
 
 # Filtered year 2014
@@ -3712,7 +3720,7 @@ df_disease_model_comm |>
 #' 
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Dataframe to iterate over for the analyses
 
 df_disease_comm_an <- tibble(
@@ -3734,7 +3742,7 @@ df_disease_comm_an <- df_disease_comm_an |>
 #' 
 #' #### Plot the response
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 1: Plot the response --------------------------------------------------------------
 
 pwalk(
@@ -3748,7 +3756,7 @@ pwalk(
 #' #### Fit model
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 2: Fit the model ----------------------------------------------------------------
 
 # Get number of basis functions for trend
@@ -3775,7 +3783,7 @@ df_disease_comm_an <- df_disease_comm_an |>
 #' 
 #' #### Check model
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 3: Check the model --------------------------------------------------------------
 
 pwalk(
@@ -3787,7 +3795,7 @@ pwalk(
 #' 
 #' #### Get predictions
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 4: Get predictions, as well as decomposition into trend, seasonal and residual ----
 
 # Get predictions and time series decomposition
@@ -3801,7 +3809,7 @@ df_disease_comm_an <- df_disease_comm_an |>
 #' 
 #' #### Plot time series decomposition
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 
 # Step 5: Plot time series decomposition -----------------------------------------------
 
@@ -3816,7 +3824,7 @@ pwalk(
 #' 
 #' #### Make contrasts for the trend
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 7: Make contrasts for the trend -------------------------------------------------
 # note: Standard errors and hypothesis tests computed with Delta method
 # (marginaleffects default)
@@ -3836,7 +3844,7 @@ df_disease_comm_an <- df_disease_comm_an |>
 #' 
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 
 # Prepare table for contrasts
 contrast_tbl_dis_raw <- df_disease_comm_an |> 
@@ -3849,7 +3857,8 @@ contrast_tbl_dis_raw <- df_disease_comm_an |>
   )
 
 # All constrasts
-contrast_tbl_dis_full <- prepare_contrast_table_full(contrast_tbl_dis_raw)
+contrast_tbl_dis_full <- prepare_contrast_table_full(contrast_tbl_dis_raw,
+                                                     date_range_contrast_label="(2015-01 to 2022-12)")
 
 contrast_tbl_dis_full
 
@@ -3865,7 +3874,8 @@ walk(
 )
 
 # p.value < 0.05
-contrast_tbl_dis_filt <- prepare_contrast_table_filt(contrast_tbl_dis_raw)
+contrast_tbl_dis_filt <- prepare_contrast_table_filt(contrast_tbl_dis_raw,
+                                                     date_range_contrast_label="(2015-01 to 2022-12)")
 
 # Save
 walk(
@@ -3880,7 +3890,7 @@ walk(
 
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Save results
 save(
   df_disease_comm_an,
@@ -3890,14 +3900,14 @@ save(
 )
 
 # load(
-#   file.path(res_path, "R_output", "2015_onwards", "disease_descriptive.RData")
+#   file.path(res_path, "R_output", "2015_onwards", "disease-communicable_descriptive.RData")
 # )
 
 #' 
 #' 
 #' ### Per disease_group
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Setup data
 
 # Filtered year 2014
@@ -3946,7 +3956,7 @@ df_disease_model_group |>
 #' 
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Dataframe to iterate over for the analyses
 
 df_disease_group_an <- tibble(
@@ -3973,7 +3983,7 @@ df_disease_group_an <- df_disease_group_an |>
 #' 
 #' #### Plot the response
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 1: Plot the response --------------------------------------------------------------
 
 pwalk(
@@ -3986,7 +3996,7 @@ pwalk(
 #' #### Fit model
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 2: Fit the model ----------------------------------------------------------------
 
 # Get number of basis functions for trend
@@ -4013,7 +4023,7 @@ df_disease_group_an <- df_disease_group_an |>
 #' 
 #' #### Check model
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 3: Check the model --------------------------------------------------------------
 
 pwalk(
@@ -4025,7 +4035,7 @@ pwalk(
 #' 
 #' #### Get predictions
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 4: Get predictions, as well as decomposition into trend, seasonal and residual ----
 
 # Get predictions and time series decomposition
@@ -4039,7 +4049,7 @@ df_disease_group_an <- df_disease_group_an |>
 #' 
 #' #### Plot time series decomposition
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 
 # Step 5: Plot time series decomposition -----------------------------------------------
 
@@ -4053,7 +4063,7 @@ pwalk(
 #' 
 #' #### Make contrasts for the trend
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Step 7: Make contrasts for the trend -------------------------------------------------
 # note: Standard errors and hypothesis tests computed with Delta method
 # (marginaleffects default)
@@ -4073,7 +4083,7 @@ df_disease_group_an <- df_disease_group_an |>
 #' 
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 
 # Prepare table for contrasts
 contrast_tbl_dis_raw <- df_disease_group_an |> 
@@ -4086,7 +4096,8 @@ contrast_tbl_dis_raw <- df_disease_group_an |>
   )
 
 # All constrasts
-contrast_tbl_dis_full <- prepare_contrast_table_full(contrast_tbl_dis_raw)
+contrast_tbl_dis_full <- prepare_contrast_table_full(contrast_tbl_dis_raw,
+                                                     date_range_contrast_label="(2015-01 to 2022-12)")
 
 contrast_tbl_dis_full
 
@@ -4102,7 +4113,8 @@ walk(
 )
 
 # p.value < 0.05
-contrast_tbl_dis_filt <- prepare_contrast_table_filt(contrast_tbl_dis_raw)
+contrast_tbl_dis_filt <- prepare_contrast_table_filt(contrast_tbl_dis_raw,
+                                                     date_range_contrast_label="(2015-01 to 2022-12)")
 
 # Save
 walk(
@@ -4117,18 +4129,18 @@ walk(
 
 #' 
 #' 
-## -----------------------------------------------------------------------------------------
+## ---------------------------------------------------------------------------------------
 # Save results
 save(
-  df_disease_comm_an,
-  df_disease_model_comm,
+  df_disease_group_an,
+  df_disease_model_group,
   file = file.path(res_path, "R_output",
                    "2015_onwards",
                    "disease-group_descriptive.RData")
 )
 
 # load(
-#   file.path(res_path, "R_output", "2015_onwards", "disease_descriptive.RData")
+#   file.path(res_path, "R_output", "2015_onwards", "disease-group_descriptive.RData")
 # )
 
 #' 
