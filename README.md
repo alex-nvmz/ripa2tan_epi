@@ -58,7 +58,7 @@ It creates an initial version of the dataset in `/data/processed/initial`, compo
 - `environmental.csv`
 - `disease.csv`
 
-Data sources:
+<!-- Data sources:
 - Population:
     - `population/pop_millions.xlsx`
 - Environment:
@@ -73,7 +73,7 @@ Data sources:
     - `environmental/main/siha_utci_2012_oct_2022.csv`
 - Disease:
     - `disease_v2/Moshi_monthlydata_cleaned_june_2024.csv`
-    - `disease_v2/Siha_monthlydata_cleaned_june_2024_august_updated.csv`
+    - `disease_v2/Siha_monthlydata_cleaned_june_2024_august_updated.csv` -->
 
 ### 02_initial-description.R
 
