@@ -10,16 +10,8 @@ job-log/
 venv/
 
 # Data
-# /data/raw/*
-# !/data/raw/.gitkeep
-# /data/processed/*
-# !/data/processed/.gitkeep
 
 # Output
-# /results/plots/*
-# !/results/plots/.gitkeep
-# /results/tables/*
-# !/results/tables/.gitkeep
 /results/R_output/*
 
 # Others

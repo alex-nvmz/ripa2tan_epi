@@ -1,56 +1,18 @@
-#' ---
-#' title: "01: Data processing"
-#' execute: 
-#'   warning: false
-#' toc: true
-#' toc-depth: 3
-#' toc-expand: true
-#' fig-width: 16
-#' fig-asp: 0.618  # golden ratio
-#' format:
-#'   html:
-#'     grid:
-#'       body-width: 950px
-#'     embed-resources: true
-#' # knitr:
-#' #   opts_chunk:
-#' #     out.width: "100%"
-#' ---
-#' 
-#' Notebook to clean up all the raw data.
-#' 
-#' # Setup
-#' 
-## ---------------------------------------------------------------------------------------
-library(tidyverse)
-theme_set(theme_bw(base_size = 16))
-library(readxl)
-library(ggokabeito)
-library(ggh4x)  # facet_nested
+# It processes raw data of population, environment and disease from /data/raw
+# It creates initial version of dataset in /data/processed/initial
 
-#' 
-#' 
-## ---------------------------------------------------------------------------------------
-base_path <- ".."
-data_path <- file.path(base_path, "data")
-res_path <- file.path(base_path, "results")
+# setup
+source("00_source.R")
 
+library(readxl) # read excel
 
-# data_path <- "local_data_path"
-
-#' 
-#' # Data processing
-#' 
-#' 
-#' ## Population data
-#' 
-## ---------------------------------------------------------------------------------------
+# Population data ------------------------------------------------------------------------
 
 # Get yearly population
 pop <- read_excel(
   file.path(data_path, "raw", "population", "pop_millions.xlsx"),
   range = cell_cols("B:F")
-  )
+)
 
 # Clean
 pop <- pop |> 
@@ -75,23 +37,25 @@ pop
 
 write_csv(
   pop,
-  file.path(data_path, "processed", "population.csv")
+  file.path(data_path, "processed", "initial", "population.csv")
 )
 
 
-#' 
-#' ## Environmental data
-#' 
-#' The environmental data is scattered in different files.
-#' 
-#' ### PM2.5
-#' 
-#' For PM2.5, originally we received the file 'avgpm25_monthly.csv'. After that, we received 'avg_pm25_monthly_siha_np.csv', with the values for Siha calculated without considering the National Park area (this is better). We will substitute the values of the second file onto the first one.
-#' 
-#' We also have the monthly data for 2012 and 2013 in separate files.
-#' 
-#' 
-## ---------------------------------------------------------------------------------------
+# Environmental data --------------------------------------------------------------------
+
+# Scattered across different files
+
+## PM2.5 -----------------------------------
+
+# Originally we had file 'avgpm25_monthly.csv'
+# Then we received 'avg_pm25_monthly_siha_np.csv', with the values for Siha calculated
+# without considering the National Park area (better)
+
+# We substitute the values from the second file into the first one
+
+# We also received separately files with data for 2012 and 2013:
+# 2012_pm2_5.csv
+# 2013_pm2_5.csv
 
 pm2p5 <- read_csv(
   file.path(data_path, "raw", "environmental", "main", "avgpm25_monthly.csv"),
@@ -189,10 +153,9 @@ pm2p5 <- pm2p5 |>
 
 pm2p5
 
-#' 
-#' ### Greenness
-#' 
-## ---------------------------------------------------------------------------------------
+
+## Greenness ------------------------------------
+
 green <- read_csv(
   file.path(data_path, "raw", "environmental", "main", "monthwise_greenness.csv")
 )
@@ -217,18 +180,16 @@ green <- green |>
       district,
       "moshi" ~ "Moshi",
       "siha" ~ "Siha"
-      )
+    )
   ) |> 
   relocate(district, date)
 
 green
 
-#' 
-#' ### Rain
-#' 
-#' Total rainfall (mm) and No. rain days.
-#' 
-## ---------------------------------------------------------------------------------------
+## Rain -----------------------------------
+
+# Total rainfall (mm) and No. rain days
+
 rain <- read_csv(
   file.path(data_path, "raw", "environmental", "main", "rc_month_rain_satellite.csv"),
   col_select = -1
@@ -247,12 +208,10 @@ rain <- rain |>
 
 rain
 
-#' 
-#' ### Temperature
-#' 
-#' Minimum, mean and maximum temperatures.
-#' 
-## ---------------------------------------------------------------------------------------
+## Temperature -----------------------------
+
+# Minimum, mean and maximum temperatures
+
 temp <- read_csv(
   file.path(data_path, "raw", "environmental", "main", "sat_temp.csv"),
   col_select = -1
@@ -281,11 +240,33 @@ temp <- temp |>
 
 temp
 
-#' 
-#' 
-#' ### Heat index
-#' 
-## ---------------------------------------------------------------------------------------
+
+# Use new temperature values provided by Netra's collaborators (28-08-24)
+rm(temp)
+
+temp <- read_excel(
+  file.path(data_path, "raw", "environmental",
+            "temperature_correction", "environmental_v2.xlsx"),
+)
+
+temp <-
+  temp |> 
+  select(
+    district, date, temp_min_new, temp_mean_new, temp_max_new
+  ) |> 
+  mutate(
+    date = as.Date(date)
+  ) |> 
+  rename(
+    temp_min = temp_min_new,
+    temp_mean = temp_mean_new,
+    temp_max = temp_max_new
+  )
+
+temp
+
+## Heat index ----------------------------------
+
 heat_moshi <- read_csv(
   file.path(data_path, "raw", "environmental", "main", "moshi_utci_2012_oct_2022.csv"),
   col_select = -1
@@ -315,48 +296,42 @@ heat <- heat |>
 
 heat
 
-#' 
-#' 
-#' ### Merge
-#' 
-## ---------------------------------------------------------------------------------------
-df_environ <- pm2p5 |>
+## Merge --------------------------------------
+
+envir <- pm2p5 |>
   full_join(green, by=c("date", "district")) |> 
   full_join(rain, by=c("date", "district")) |> 
   full_join(temp, by=c("date", "district")) |> 
   full_join(heat, by=c("date", "district"))
 
-df_environ <- df_environ |> 
+envir <- envir |> 
   arrange(district, date)
 
-df_environ |> 
+envir |> 
   print(width=Inf)
 
 # Save
 write_csv(
-  df_environ,
-  file.path(data_path, "processed", "environmental.csv")
+  envir,
+  file.path(data_path, "processed", "initial", "environmental.csv")
 )
 
-#' 
-#' 
-#' ### Other air quality variables
-#' 
-#' There is data on other air quality variables from 2018 onward, but I do not understand the format (what is value.ID? Why does one place and time have multiple measurements?).
-#' 
-#' This data is NO2, O3, SO2 and AOD
-#' 
-## ---------------------------------------------------------------------------------------
-# Additional air quality variables (2018-) -----------------------------------------------
+## Other air quality variables ----------------------------------
+
+# Data on other air quality variables from 2018 onward, 
+# the format of which I do not understand
+
+# They will not be processed
+
+# The data is NO2, O3, SO2 and AOD
 
 # NO2
 
-no2 <- read_csv(
-  file.path(data_path, "raw", "environmental", "other_air-quality", "no2_monthly_2018_2021.csv"),
-  col_select = -1
-)
-
-no2
+# no2 <- read_csv(
+#   file.path(data_path, "raw", "environmental", "other_air-quality", "no2_monthly_2018_2021.csv"),
+#   col_select = -1
+# )
+# no2
 
 # O3
 # file.path(data_path, "raw", "environmental", "other_air-quality", "ozone_monthly_2018_2021.csv")
@@ -368,14 +343,9 @@ no2
 # file.path(data_path, "raw", "environmental", "other_air-quality", "AOD_monthly_2018_2021.csv")
 
 
-#' 
-#' 
-#' ## Disease data
-#' 
-#' ### Moshi
-#' 
-## ---------------------------------------------------------------------------------------
-# Moshi
+# Disease data ---------------------------------------------------------------------------
+
+## Moshi -------------------------
 
 moshi <- read_csv(
   file.path(data_path, "raw", "disease_v2", "Moshi_monthlydata_cleaned_june_2024.csv"),
@@ -408,18 +378,13 @@ moshi <- moshi |>
     disease_communicable = Category
   ) |> 
   relocate(district, date, disease, disease_group, disease_communicable, n_cases)
-  
+
 moshi
 
-#' 
-#' ### Siha
-#' 
-## ---------------------------------------------------------------------------------------
-# Siha
+## Siha -------------------------
 
 siha <- read_csv(
   file.path(data_path, "raw", "disease_v2", "Siha_monthlydata_cleaned_june_2024_august_updated.csv"),
-  # file.path(data_path, "raw", "disease_v2", "Siha_monthlydata_cleaned_june_2024.csv"),
   col_select = -1
 )
 
@@ -449,39 +414,28 @@ siha <- siha |>
     disease_communicable = Category
   ) |> 
   relocate(district, date, disease, disease_group, disease_communicable, n_cases)
-  
+
 siha
 
-#' 
-#' 
-#' ### Merge
-#' 
-## ---------------------------------------------------------------------------------------
-df_disease <- full_join(moshi, siha, by=colnames(moshi))
 
-df_disease <- df_disease |> 
+## Merge --------------------
+
+dis <- full_join(moshi, siha, by=colnames(moshi))
+
+dis <- dis |> 
   arrange(district, disease, date)
 
-df_disease
+dis
 
-#' 
-#' 
-## ---------------------------------------------------------------------------------------
-df_disease$disease |> table()
+# Diseases differ in the number of observations. Snake And Insect Bites repeated.
+dis$disease |> table()
 
-#' 
-#' Diseases differ in the number of observations. Snake And Insect Bites repeated.
-#' 
-## ---------------------------------------------------------------------------------------
-df_disease$disease_group |> table()
+dis$disease_group |> table()
+dis$disease_communicable |> table()
 
-df_disease$disease_communicable |> table()
 
-#' 
-#' 
-## ---------------------------------------------------------------------------------------
 # Fix category
-df_disease <- df_disease |> 
+dis <- dis |> 
   mutate(
     disease = case_match(
       disease,
@@ -490,242 +444,35 @@ df_disease <- df_disease |>
     )
   )
 
-#' 
-#' The 'disease' category is the most important one for the analyses. Categories 'disease_group' and 'disease_communicable' are relevant for the discussion. The groupings will be changed according to Chrysanthi and Harald's notes.
-#' 
-#' 
-## ---------------------------------------------------------------------------------------
-# Save after checking missings
-# write_csv(
-#   df_disease,
-#   file.path(data_path, "processed", "disease.csv")
-# )
-
-#' 
-#' 
-#' 
-#' ## Missing data
-#' 
-#' Evaluate missingness with respect to time.
-#' 
-## ---------------------------------------------------------------------------------------
-pop$date |> range()
-
-df_disease$date |> range()
-
-df_environ$date |> range()
-
-total_range <- c(pop$date, df_disease$date, df_environ$date) |>
-  range()
-total_range
-
-#' 
-#' The most important range is the one of the disease data, which is the one that is relevant for the regression analysis: 2014-01-01 to 2022-12-01.
-#' 
-#' If we have missings on any of the regressors, we will not be able to include that observation in the regression.
-#' 
-#' We are missing the population for 2022, and this is vital for the analysis. We should impute it, at least to explore the incidence rate for 2022.
-#' 
-#' Let us evaluate the missingness for each variable.
-#' 
-#' ### Population
-#' 
-## ---------------------------------------------------------------------------------------
-# Visualize population
-pop |> 
-  ggplot() +
-  geom_point(
-    aes(x=date, y=population, color=district)
-  )
-
-#' 
-#' 
-#' Population has been increasing linearly each year. We could impute the population of 2022 with a prediction from a linear model.
-#' 
-#' ### Environmental
-#' 
-## ---------------------------------------------------------------------------------------
-# Visualize missingness
-
-var_order <- colnames(df_environ)[3:10]
-
-df_environ |>
-  pivot_longer(
-    cols = pm2p5:utci,
-    names_to="variable",
-    values_to="value"
-  ) |> 
+# Fix typos in groups
+dis <- dis |> 
   mutate(
-    variable = factor(variable, levels=var_order)
-  ) |>
-  ggplot() +
-  geom_tile(
-    aes(x=date, y=variable, fill=is.na(value)),
-    color="black",
-    width=31
-  ) +
-  scale_fill_manual(
-    values = c("steelblue3", "gray20"),
-    labels = c("No", "Yes")
-  ) +
-  labs(
-    fill = "Missing",
-    x = "Date (month)",
-    y = ""
-  ) +
-  facet_wrap(
-    ~ district,
-    ncol=2
-  ) +
-  theme(
-    legend.title = element_text(face="bold"),
-    axis.title = element_text(face="bold"),
-    strip.text = element_text(face="bold")
-  )
-
-ggsave(
-  file.path(res_path, "plots", "environmental_missing.png"),
-  width=16, height=16*0.618
-)
-
-# map(
-#   paste0(file.path(res_path, "plots", "environmental_missing."), c("svg", "png")),
-#   ~ ggsave(.x, width=16, height=16*0.618)
-# )
-
-#' 
-#' 
-#' All variables except PM2.5 and UTCI (partially) are missing for 2022. We should exclude 2022 from the regression.
-#' 
-#' Greenness and UTCI have some missing values in the middle of their time series, so it could be reasonable to impute them.
-#' 
-#' Rain is missing for Siha in 2021. I think we should forecast these values, so as to be able to include the observations from 2021 in the regression.
-#' 
-#' 
-#' ### Disease
-#' 
-#' 
-## ---------------------------------------------------------------------------------------
-# Missingness in no. of cases
-
-df_disease |> 
-  # More space
-  mutate(
-    disease_group = recode(
+    disease_group = case_match(
       disease_group,
-      `Diarrheal disease/Gastrointesntinal infections`="Diarrheal disease/\nGastrointesntinal infections",
-      `Other Communicable Diseases/Gastrointestinal infections`="Other Communicable Diseases/\nGastrointestinal infections"
-      )
-  ) |>
-  ggplot() +
-  geom_tile(
-    aes(x=date, y=disease, fill=is.na(n_cases)),
-    color="black",
-    width=31
-  ) +
-  facet_nested(
-    cols = vars(district),
-    rows = vars(disease_communicable, disease_group),
-    scales = "free_y",
-    space = "free_y",
-    # strip = strip_vanilla(size = "variable", clip = "off"),
-    strip = strip_nested(size = "variable", clip="off", bleed = FALSE),
-    solo_line = TRUE,
-    nest_line = TRUE,
-    # switch = "y"
-  ) +
-  scale_fill_manual(
-    values = c("steelblue3", "gray20"),
-    labels = c("No", "Yes")
-  ) +
-  labs(
-    fill = "Missing",
-    x = "Date (month)",
-    y = ""
-  ) +
-  theme(
-    legend.title = element_text(face="bold"),
-    axis.title = element_text(face="bold"),
-    strip.text = element_text(face="bold"),
-    # strip.background = element_rect(fill="white", color="gray"),
-    strip.background = element_blank(),
-    # ggh4x.facet.nestline = element_line(colour = "black"),
-    strip.text.y = element_text(angle=0, size=rel(1)),
-    strip.text.x = element_text(angle=0, size=rel(1.5)),
-    legend.text = element_text(face="bold", size=rel(1.0))
+      .default = disease_group,
+      "Diarrheal disease/Gastrointesntinal infections" ~ "Diarrheal disease/Gastrointestinal infections"
+    )
   )
 
-
-#' 
-#' There are missing observations which are not coded as missing
-#' 
-## ---------------------------------------------------------------------------------------
-# Fix and repeat plot
-
-df_disease <- df_disease |> 
-  complete(district, date, nesting(disease, disease_group, disease_communicable))
-
-df_disease |> 
-  # More space
+# Rename Bronchial Asthma to Chronic Respiratory Disease (doctor criterion)
+dis <- dis |> 
   mutate(
-    disease_group = recode(
-      disease_group,
-      `Diarrheal disease/Gastrointesntinal infections`="Diarrheal disease/\nGastrointesntinal infections",
-      `Other Communicable Diseases/Gastrointestinal infections`="Other Communicable Diseases/\nGastrointestinal infections"
-      )
-  ) |>
-  ggplot() +
-  geom_tile(
-    aes(x=date, y=disease, fill=is.na(n_cases)),
-    color="black",
-    width=31
-  ) +
-  facet_nested(
-    cols = vars(district),
-    rows = vars(disease_communicable, disease_group),
-    scales = "free_y",
-    space = "free_y",
-    # strip = strip_vanilla(size = "variable", clip = "off"),
-    strip = strip_nested(size = "variable", clip="off", bleed = FALSE),
-    solo_line = TRUE,
-    nest_line = TRUE,
-    # switch = "y"
-  ) +
-  scale_fill_manual(
-    values = c("steelblue3", "gray20"),
-    labels = c("No", "Yes")
-  ) +
-  labs(
-    fill = "Missing",
-    x = "Date (month)",
-    y = ""
-  ) +
-  theme(
-    legend.title = element_text(face="bold"),
-    axis.title = element_text(face="bold"),
-    strip.text = element_text(face="bold"),
-    # strip.background = element_rect(fill="white", color="gray"),
-    strip.background = element_blank(),
-    # ggh4x.facet.nestline = element_line(colour = "black"),
-    strip.text.y = element_text(angle=0, size=rel(1)),
-    strip.text.x = element_text(angle=0, size=rel(1.5)),
-    legend.text = element_text(face="bold", size=rel(1.0))
+    disease = case_match(
+      disease,
+      "Bronchial Asthma" ~ "Chronic Respiratory Disease",
+      .default = disease
+    )
   )
 
-ggsave(
-  file.path(res_path, "plots", "disease_missing.png"),
-  width=18, height=18*0.700
-)
 
-#' 
-#' We have complete observations for many diseases of interest.
-#' 
-#' 
-## ---------------------------------------------------------------------------------------
+dis
+
+# The 'disease' category is the most important one for the analyses.
+# Categories 'disease_group' and 'disease_communicable' are relevant for the discussion.
+# The groupings will be changed according to Chrysanthi and Harald's notes.
+
 # Save
 write_csv(
-  df_disease,
-  file.path(data_path, "processed", "disease.csv")
+  dis,
+  file.path(data_path, "processed", "initial", "disease.csv")
 )
-
-#' 
