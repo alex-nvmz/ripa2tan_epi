@@ -48,6 +48,7 @@ main_cases <-
     ~ exposure, ~ disease,
     "pm2p5", "Chronic Respiratory Disease",
     "pm2p5", "Infectious Eye Disease",
+    "pm2p5", "Malaria",
     "greenness", "Diabetes Mellitus",
     "greenness", "Urinary Tract Infections",
     "greenness", "Malaria",
@@ -56,7 +57,6 @@ main_cases <-
     "n_raindays", "Upper Respiratory Infections",
     
     # "n_raindays", "Malaria",
-    # "pm2p5", "Malaria"
   )
 
 # create filtering id
@@ -554,13 +554,13 @@ p_assemb <-
     ncol=1
   )
 
-p_assemb[[1]] <- (p_assemb[[1]] + plot_spacer())
+# p_assemb[[1]] <- (p_assemb[[1]] + plot_spacer())
 
 
 
 pdf(
   file.path(res_path, "plots", "figures", "exposure-response_filtered_main.pdf"),
-  width = 20 * 0.2 * 3,
+  width = 20 * 0.21 * 3,
   height = 10.6 * 0.44 * length(unique(df_iter_filt$exposure))
 )
 
@@ -731,7 +731,7 @@ tab_expo_resp <-
         abs(E - E_q5) == min(abs(E - E_q5))
       ) |> 
       mutate(
-        IRR_E_q5 = cint_str(eta, 0.025, 0.975, acc, star=TRUE, star_val=1)
+        IRR_E_q5 = cint_str(eta, 0.025, 0.975, acc, star=TRUE, star_val=1, star_bold=TRUE)
       ) |> 
       select(district, cf_E, IRR_E_q5)
     
@@ -742,7 +742,7 @@ tab_expo_resp <-
         abs(E - E_q95) == min(abs(E - E_q95))
       ) |> 
       mutate(
-        IRR_E_q95 = cint_str(eta, 0.025, 0.975, acc, star=TRUE, star_val=1)
+        IRR_E_q95 = cint_str(eta, 0.025, 0.975, acc, star=TRUE, star_val=1, star_bold=TRUE)
       ) |> 
       select(district, cf_E, IRR_E_q95)
     
@@ -770,7 +770,6 @@ tab_expo_resp <-
 
 tab_expo_resp |> 
   print(n=Inf)
-
 
 # save table data
 write_csv(
@@ -823,6 +822,7 @@ gtab <-
     rowname_col = "district",
     process_md = TRUE
   ) |> 
+  fmt_markdown() |> 
   cols_align(
     "right"
   ) |> 
@@ -840,7 +840,7 @@ gtab <-
     .fn=md
   ) |> 
   tab_footnote(
-    footnote = "*: 95% credibility interval excluding 0"
+    footnote = "*: 95% credibility interval excluding 1"
   )
 
 
@@ -894,6 +894,7 @@ gtab <-
     rowname_col = "district",
     process_md = TRUE
   ) |> 
+  fmt_markdown() |> 
   cols_align(
     "right"
   ) |> 
@@ -911,7 +912,7 @@ gtab <-
     .fn=md
   ) |> 
   tab_footnote(
-    footnote = "*: 95% credibility interval excluding 0"
+    footnote = "*: 95% credibility interval excluding 1"
   )
 
 
@@ -926,6 +927,7 @@ walk(
               g("expo_resp_pm-rain_all-else.{extension}"))
   )
 )
+
 
 
 #### CF is E of min IR -------------
@@ -969,6 +971,7 @@ gtab <-
     rowname_col = "district",
     process_md = TRUE
   ) |> 
+  fmt_markdown() |> 
   cols_align(
     "right"
   ) |> 
@@ -1003,7 +1006,7 @@ gtab <-
     .fn = md
   ) |> 
   tab_footnote(
-    footnote = "*: 95% credibility interval excluding 0"
+    footnote = "*: 95% credibility interval excluding 1"
   )
 
 
@@ -1056,6 +1059,7 @@ gtab <-
     rowname_col = "district",
     process_md = TRUE
   ) |> 
+  fmt_markdown() |> 
   cols_align(
     "right"
   ) |> 
@@ -1090,7 +1094,7 @@ gtab <-
     .fn = md
   ) |> 
   tab_footnote(
-    footnote = "*: 95% credibility interval excluding 0"
+    footnote = "*: 95% credibility interval excluding 1"
   )
 
 
@@ -1106,7 +1110,343 @@ walk(
   )
 )
 
+#### all together minus UTCI -------------------
 
+# main diseases
+
+tab_wide1 <-
+  tab_expo_resp |> 
+  filter(
+    exposure %in% c(
+      "pm2p5",
+      "total_rainfall",
+      "n_raindays"
+    ),
+    disease %in% main_dis
+  ) |> 
+  mutate(
+    disease = factor(disease, levels=main_dis),
+    exposure = factor(exposure, levels=c(
+      "pm2p5",
+      "total_rainfall",
+      "n_raindays"
+    ))
+  ) |> 
+  arrange(disease, exposure) |> 
+  relocate(disease, exposure) |> 
+  # remove unnecessary cols
+  select(- c(cf_E, IRR_E_q5)) |> 
+  # to wide
+  pivot_wider(
+    names_from = exposure,
+    values_from = c(IRR_E_q95),
+    names_sep = "."
+  )
+
+tab_wide2 <-
+  tab_expo_resp |> 
+  filter(
+    exposure %in% c(
+      "temp_max",
+      "greenness"
+    ),
+    disease %in% main_dis
+  ) |> 
+  mutate(
+    disease = factor(disease, levels=main_dis),
+    exposure = factor(exposure, levels=c(
+      "temp_max",
+      "utci",
+      "greenness"
+    ))
+  ) |> 
+  arrange(disease, exposure) |> 
+  relocate(disease, exposure) |> 
+  # to wide
+  pivot_wider(
+    names_from = exposure,
+    values_from = c(cf_E, IRR_E_q5, IRR_E_q95),
+    names_sep = ".",
+    names_vary = "slowest"
+  )
+
+tab_wide <-
+  tab_wide1 |> 
+  left_join(tab_wide2)
+
+
+gtab <-
+  tab_wide |> 
+  gt(
+    groupname_col = "disease",
+    rowname_col = "district",
+    process_md = TRUE
+  ) |> 
+  fmt_markdown() |> 
+  cols_align(
+    "right"
+  ) |> 
+  tab_stubhead("Disease") |> 
+  # column spanners
+  tab_spanner(
+    label = "PM2.5",
+    columns = c(pm2p5)
+  ) |> 
+  tab_spanner(
+    label = "Rainfall",
+    columns = c(total_rainfall)
+  ) |> 
+  tab_spanner(
+    label = "No. rain days",
+    columns = c(n_raindays)
+  ) |> 
+  tab_spanner(
+    label = "Max. temperature (ºC)",
+    columns = c(cf_E.temp_max, IRR_E_q5.temp_max, IRR_E_q95.temp_max)
+  ) |> 
+  # tab_spanner(
+  #   label = "UTCI",
+  #   columns = c(cf_E.utci, IRR_E_q5.utci, IRR_E_q95.utci)
+  # ) |> 
+  tab_spanner(
+    label = "Greenness (NDVI)",
+    columns = c(cf_E.greenness, IRR_E_q5.greenness, IRR_E_q95.greenness)
+  ) |> 
+  # column labels
+  cols_label(
+    pm2p5 = "IRR at <br>95th perc.",
+    total_rainfall = "IRR at <br>95th perc.",
+    n_raindays = "IRR at <br>95th perc.",
+    cf_E.temp_max = "CF. <br>exposure",
+    # cf_E.utci = "CF. <br>exposure",
+    cf_E.greenness = "CF. <br>exposure",
+    IRR_E_q5.temp_max = "IRR at <br>5th perc.",
+    # IRR_E_q5.utci = "IRR at <br>5th perc.",
+    IRR_E_q5.greenness = "IRR at <br>5th perc.",
+    IRR_E_q95.temp_max = "IRR at <br>95th perc.",
+    # IRR_E_q95.utci = "IRR at <br>95th perc.",
+    IRR_E_q95.greenness = "IRR at <br>95th perc.",
+    .fn = md
+  ) |> 
+  tab_footnote(
+    footnote = "*: 95% credibility interval excluding 1"
+  )
+
+
+gtab
+
+
+walk(
+  c("html", "tex", "docx"),
+  \(extension) gtsave(
+    gtab,
+    file.path(res_path, "tables",
+              g("expo_resp_selected-expo_main.{extension}"))
+  )
+)
+
+# the rest of diseases
+
+tab_wide1 <-
+  tab_expo_resp |> 
+  filter(
+    exposure %in% c(
+      "pm2p5",
+      "total_rainfall",
+      "n_raindays"
+    ),
+    disease %in% c(alt_dis, other_dis, unre_dis)
+  ) |> 
+  mutate(
+    disease = factor(disease, levels=c(alt_dis, other_dis, unre_dis)),
+    exposure = factor(exposure, levels=c(
+      "pm2p5",
+      "total_rainfall",
+      "n_raindays"
+    ))
+  ) |> 
+  arrange(disease, exposure) |> 
+  relocate(disease, exposure) |> 
+  # remove unnecessary cols
+  select(- c(cf_E, IRR_E_q5)) |> 
+  # to wide
+  pivot_wider(
+    names_from = exposure,
+    values_from = c(IRR_E_q95),
+    names_sep = "."
+  )
+
+tab_wide2 <-
+  tab_expo_resp |> 
+  filter(
+    exposure %in% c(
+      "temp_max",
+      "greenness"
+    ),
+    disease %in% c(alt_dis, other_dis, unre_dis)
+  ) |> 
+  mutate(
+    disease = factor(disease, levels=c(alt_dis, other_dis, unre_dis)),
+    exposure = factor(exposure, levels=c(
+      "temp_max",
+      "utci",
+      "greenness"
+    ))
+  ) |> 
+  arrange(disease, exposure) |> 
+  relocate(disease, exposure) |> 
+  # to wide
+  pivot_wider(
+    names_from = exposure,
+    values_from = c(cf_E, IRR_E_q5, IRR_E_q95),
+    names_sep = ".",
+    names_vary = "slowest"
+  )
+
+tab_wide <-
+  tab_wide1 |> 
+  left_join(tab_wide2)
+
+
+gtab <-
+  tab_wide |> 
+  gt(
+    groupname_col = "disease",
+    rowname_col = "district",
+    process_md = TRUE
+  ) |> 
+  fmt_markdown() |> 
+  cols_align(
+    "right"
+  ) |> 
+  tab_stubhead("Disease") |> 
+  # column spanners
+  tab_spanner(
+    label = "PM2.5",
+    columns = c(pm2p5)
+  ) |> 
+  tab_spanner(
+    label = "Rainfall",
+    columns = c(total_rainfall)
+  ) |> 
+  tab_spanner(
+    label = "No. rain days",
+    columns = c(n_raindays)
+  ) |> 
+  tab_spanner(
+    label = "Max. temperature (ºC)",
+    columns = c(cf_E.temp_max, IRR_E_q5.temp_max, IRR_E_q95.temp_max)
+  ) |> 
+  # tab_spanner(
+  #   label = "UTCI",
+  #   columns = c(cf_E.utci, IRR_E_q5.utci, IRR_E_q95.utci)
+  # ) |> 
+  tab_spanner(
+    label = "Greenness (NDVI)",
+    columns = c(cf_E.greenness, IRR_E_q5.greenness, IRR_E_q95.greenness)
+  ) |> 
+  # column labels
+  cols_label(
+    pm2p5 = "IRR at <br>95th perc.",
+    total_rainfall = "IRR at <br>95th perc.",
+    n_raindays = "IRR at <br>95th perc.",
+    cf_E.temp_max = "CF. <br>exposure",
+    # cf_E.utci = "CF. <br>exposure",
+    cf_E.greenness = "CF. <br>exposure",
+    IRR_E_q5.temp_max = "IRR at <br>5th perc.",
+    # IRR_E_q5.utci = "IRR at <br>5th perc.",
+    IRR_E_q5.greenness = "IRR at <br>5th perc.",
+    IRR_E_q95.temp_max = "IRR at <br>95th perc.",
+    # IRR_E_q95.utci = "IRR at <br>95th perc.",
+    IRR_E_q95.greenness = "IRR at <br>95th perc.",
+    .fn = md
+  ) |> 
+  tab_footnote(
+    footnote = "*: 95% credibility interval excluding 1"
+  )
+
+
+gtab
+
+
+walk(
+  c("html", "tex", "docx"),
+  \(extension) gtsave(
+    gtab,
+    file.path(res_path, "tables",
+              g("expo_resp_selected-expo_all-else.{extension}"))
+  )
+)
+
+#### UTCI -----------------------------
+
+
+tab_wide <-
+  tab_expo_resp |> 
+  filter(
+    exposure %in% c(
+      "utci"
+    ),
+    disease %in% c(main_dis, alt_dis, other_dis, unre_dis)
+  ) |> 
+  mutate(
+    disease = factor(disease, levels=c(main_dis, alt_dis, other_dis, unre_dis)),
+    exposure = factor(exposure, levels=c(
+      "utci"
+    ))
+  ) |> 
+  arrange(disease, exposure) |> 
+  relocate(disease, exposure) |> 
+  # to wide
+  pivot_wider(
+    names_from = exposure,
+    values_from = c(cf_E, IRR_E_q5, IRR_E_q95),
+    names_sep = ".",
+    names_vary = "slowest"
+  )
+
+gtab <-
+  tab_wide |> 
+  gt(
+    groupname_col = "disease",
+    rowname_col = "district",
+    process_md = TRUE
+  ) |> 
+  fmt_markdown() |> 
+  cols_align(
+    "right"
+  ) |> 
+  tab_stubhead("Disease") |> 
+  # column spanners
+  tab_spanner(
+    label = "UTCI",
+    columns = c(cf_E.utci, IRR_E_q5.utci, IRR_E_q95.utci)
+  ) |> 
+  # column labels
+  cols_label(
+    cf_E.utci = "CF. <br>exposure",
+    IRR_E_q5.utci = "IRR at <br>5th perc.",
+    IRR_E_q95.utci = "IRR at <br>95th perc.",
+    .fn = md
+  ) |> 
+  tab_footnote(
+    footnote = "*: 95% credibility interval excluding 1"
+  )
+
+
+gtab
+
+
+walk(
+  c("html", "tex", "docx"),
+  \(extension) gtsave(
+    gtab,
+    file.path(res_path, "tables",
+              g("expo_resp_utci_all-diseases.{extension}"))
+  )
+)
+
+    
 # Aggregated AFs -------------------------------------------------------------------------
 
 # combine all AFs in one dataframe
@@ -1282,6 +1622,19 @@ df_af_filt <-
     disease_short = str_replace(disease, "^(\\S+\\s+\\S+)\\s+", "\\1\n")
   )
 
+# sort disease labels
+sorted_lab <-
+  df_af_filt |> 
+  arrange(disease) |> 
+  pull(disease_short) |> 
+  unique()
+
+df_af_filt <-
+  df_af_filt |> 
+  mutate(
+    disease_short = factor(disease_short, levels=sorted_lab)
+  )
+
 df_af_filt |> 
   ggplot() +
   geom_vline(xintercept = 0) +
@@ -1337,8 +1690,8 @@ ggsave(
 tab_af <-
   df_af |> 
   mutate(
-    AF_perc = cint_str(AF*100, 0.025, 0.975, 0.1, star=TRUE, star_val=0),
-    AN = cint_str(AN, 0.025, 0.975, 1, star=TRUE, star_val=0)
+    AF_perc = cint_str(AF*100, 0.025, 0.975, 0.1, star=TRUE, star_val=0, star_bold=TRUE),
+    AN = cint_str(AN, 0.025, 0.975, 1, star=TRUE, star_val=0, star_bold=TRUE)
   ) |> 
   select(- c(AF, label)) |> 
   relocate(AF_perc, .before = AN)
@@ -1368,7 +1721,8 @@ tab_wide <-
       values_from = c(AF_perc),
       names_sep = "."
     ) |> 
-  mutate(n_cases = number(n_cases, 1))
+  mutate(n_cases = number(n_cases, 1)) |> 
+  select(- n_cases)
 
 # main diseases
 
@@ -1380,6 +1734,7 @@ gtab <-
     rowname_col = "district",
     process_md = TRUE
   ) |> 
+  fmt_markdown() |> 
   cols_align(
     "right"
   ) |> 
@@ -1391,7 +1746,7 @@ gtab <-
   ) |> 
   # column labels
   cols_label(
-    n_cases = "Total cases",
+    # n_cases = "Total cases",
     pm2p5 = "PM2.5",
     total_rainfall = "Rainfall",
     n_raindays = "No. rain days",
@@ -1426,6 +1781,7 @@ gtab <-
     rowname_col = "district",
     process_md = TRUE
   ) |> 
+  fmt_markdown() |> 
   cols_align(
     "right"
   ) |> 
@@ -1437,7 +1793,7 @@ gtab <-
   ) |> 
   # column labels
   cols_label(
-    n_cases = "Total cases",
+    # n_cases = "Total cases",
     pm2p5 = "PM2.5",
     total_rainfall = "Rainfall",
     n_raindays = "No. rain days",
@@ -1488,6 +1844,7 @@ gtab <-
     rowname_col = "district",
     process_md = TRUE
   ) |> 
+  fmt_markdown() |> 
   cols_align(
     "right"
   ) |> 
@@ -1534,6 +1891,7 @@ gtab <-
     rowname_col = "district",
     process_md = TRUE
   ) |> 
+  fmt_markdown() |> 
   cols_align(
     "right"
   ) |> 
@@ -2263,8 +2621,10 @@ tab_env_trend <-
       mutate(
         trend_start = cint_str(trend_start, 0.025, 0.975, acc),
         trend_end = cint_str(trend_end, 0.025, 0.975, acc),
-        trend_change = cint_str(trend_change, 0.025, 0.975, acc*0.1, star=TRUE, star_val=0),
-        an_trend_change = cint_str(an_trend_change, 0.025, 0.975, acc*0.1, star=TRUE, star_val=0)
+        trend_change = cint_str(trend_change, 0.025, 0.975, acc*0.1, star=TRUE,
+                                star_val=0, star_bold=TRUE),
+        an_trend_change = cint_str(an_trend_change, 0.025, 0.975, acc*0.1, star=TRUE,
+                                   star_val=0, star_bold=TRUE)
       )
     
     # table
@@ -2307,6 +2667,7 @@ gtab <-
     rowname_col = "district",
     process_md = TRUE
   ) |> 
+  fmt_markdown() |> 
   cols_align(
     "right"
   ) |> 
@@ -2699,8 +3060,10 @@ tab_dis_trend <-
         mutate(
           trend_start = cint_str(trend_start, 0.025, 0.975, acc),
           trend_end = cint_str(trend_end, 0.025, 0.975, acc),
-          trend_change = cint_str(trend_change, 0.025, 0.975, acc, star=TRUE, star_val=0),
-          an_trend_change = cint_str(an_trend_change, 0.025, 0.975, acc*0.1, star=TRUE, star_val=0)
+          trend_change = cint_str(trend_change, 0.025, 0.975, acc, star=TRUE,
+                                  star_val=0, star_bold=TRUE),
+          an_trend_change = cint_str(an_trend_change, 0.025, 0.975, acc*0.1, star=TRUE,
+                                     star_val=0, star_bold=TRUE)
         )
       
       # table
@@ -2738,6 +3101,7 @@ gtab <-
     rowname_col = "district",
     process_md = TRUE
   ) |> 
+  fmt_markdown() |> 
   cols_align(
     "right"
   ) |> 
@@ -2777,6 +3141,7 @@ gtab <-
     rowname_col = "district",
     process_md = TRUE
   ) |> 
+  fmt_markdown() |> 
   cols_align(
     "right"
   ) |> 

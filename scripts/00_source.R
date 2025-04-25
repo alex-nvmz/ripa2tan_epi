@@ -154,9 +154,27 @@ destandardize <- function(vec, org_vec, na.rm=FALSE) {
 }
 
 # create a string of a credibility interval from an rvar object, with an optional star
-cint_str <- function(rvar, qlow, qhigh, acc, star=FALSE, star_val=0) {
+# and possibility to bolden text with markdown notation
+cint_str <- function(rvar, qlow, qhigh, acc, star=FALSE, star_val=0, star_bold=FALSE) {
+  
+  # if star should be added, get positions where
+  if (star) {
+    star_flags <-
+      ifelse(
+      (star_val >= quantile(rvar, qlow)) & (star_val <= quantile(rvar, qhigh)),
+      FALSE,
+      TRUE
+    )
+  }
+  
+  # {**}{median}({qlow}, {qhigh}){*}{**}
+  
   glue::glue(
     "{
+      if (star & star_bold) {
+        ifelse(star_flags, '**', '')
+      } else {''}
+    }{
       rvar |> median() |> scales::number(acc)
     } ({
       rvar |> quantile(qlow) |> scales::number(acc)
@@ -164,12 +182,12 @@ cint_str <- function(rvar, qlow, qhigh, acc, star=FALSE, star_val=0) {
       rvar |> quantile(qhigh) |> scales::number(acc)
     }){
     if (star) {
-        ifelse(
-          (star_val >= quantile(rvar, qlow)) & (star_val <= quantile(rvar, qhigh)),
-          ' ',
-          '*'
-        )
-     } else {''}
+        ifelse(star_flags, '*', '')
+      } else {''}
+    }{
+      if (star & star_bold) {
+          ifelse(star_flags, '**', '')
+        } else {''}
     }"
   )
 }
