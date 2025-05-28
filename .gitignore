@@ -10,13 +10,13 @@ job-log/
 venv/
 
 # Data
-./data/raw/disease_v1/*
-./data/raw/disease_v2/*
-./data/raw/yearly/*
+/data/raw/disease_v1/*
+/data/raw/disease_v2/*
+/data/raw/yearly/*
 
-./data/processed/initial/disease.csv
-./data/processed/interim/disease_final_complete.csv
-./data/processed/interim/disease_final.csv
+/data/processed/initial/disease.csv
+/data/processed/interim/disease_final_complete.csv
+/data/processed/final/disease_final.csv
 
 # Output
 /results/R_output/*
