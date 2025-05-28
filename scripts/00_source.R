@@ -55,7 +55,59 @@ main_dis <- c(
   "Infectious Eye Disease"
 )
 
-# interesting candidates
+### previous classification ----------------
+
+# # interesting candidates
+# alt_dis <- c(
+#   # communicable
+#   ## Respiratory Infections
+#   "Pneumonia, Severe",
+#   "Tuberculosis",
+#   ## Gastrointestinal Infections
+#   ##  Other Communicable Diseases
+#   "Skin Infection - Fungal",
+#   # non-communicable
+#   "Malnutrition",
+#   ## Other Non−Communicable
+#   "Peptic Ulcers",
+#   ## Neurological
+#   "Epilepsy",
+#   "Neuroses",
+#   "Psychoses"
+# )
+# 
+# # other diseases
+# other_dis <- c(
+#   # communicable
+#   ## Gastrointestinal Infections
+#   "Dysentery",
+#   "Intestinal Worms",
+#   # non-communicable
+#   "Neoplasms/Cancer",
+#   "Other Cardiovascular Diseases",
+#   ## Other Non−Communicable
+#   "Mild/Moderate Anemia",
+#   "Caries",
+#   "Poisoning",
+#   "Snake and Insect Bites",
+#   "Substance Abuse",
+#   ## Trauma
+#   "Fractures",
+#   "Road Traffic Accidents"
+# )
+# 
+# # unreliable diseases
+# unre_dis <- c(
+#   # communicable
+#   ## Gastrointestinal Infections
+#   "Typhoid",
+#   ##  Other Communicable Diseases
+#   "Leprosy",
+#   "Schistosomiasis"
+# )
+
+### 3 even groups ----------------------------------------
+
 alt_dis <- c(
   # communicable
   ## Respiratory Infections
@@ -74,7 +126,6 @@ alt_dis <- c(
   "Psychoses"
 )
 
-# other diseases
 other_dis <- c(
   # communicable
   ## Gastrointestinal Infections
@@ -86,16 +137,17 @@ other_dis <- c(
   ## Other Non−Communicable
   "Mild/Moderate Anemia",
   "Caries",
-  "Poisoning",
+  "Poisoning"
+)
+
+unre_dis <- c(
+  # non-communicable
+  ## Other Non−Communicable
   "Snake and Insect Bites",
   "Substance Abuse",
   ## Trauma
   "Fractures",
-  "Road Traffic Accidents"
-)
-
-# unreliable diseases
-unre_dis <- c(
+  "Road Traffic Accidents",
   # communicable
   ## Gastrointestinal Infections
   "Typhoid",

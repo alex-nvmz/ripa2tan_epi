@@ -305,7 +305,7 @@ plot_expo_resp <- function(df_iter, bottom_axis_title=FALSE, histo_plot=TRUE) {
         
         (
           p_name / p_row +
-            plot_layout(heights = c(1,99))
+            plot_layout(heights = c(2,98))
         )
       }
     ) |> 
@@ -413,13 +413,17 @@ plot_expo_resp(
       )},
   bottom_axis_title=FALSE,
   histo_plot=TRUE
-)
+) &
+  theme(
+    axis.title = element_text(size = rel(1.2)),
+    axis.text = element_text(size = rel(1.2))
+  )
 
 # main diseases
 pdf(
   file.path(res_path, "plots", "figures", "exposure-response_main.pdf"),
-  width = 20 * 0.2 * length(all_env),
-  height = 10.6 * 0.4 * (length(main_dis) + 0.7) 
+  width = 20 * 0.17 * length(all_env),
+  height = 10.6 * 0.3 * (length(main_dis) + 0.7) 
 )
 
 plot_expo_resp(
@@ -438,8 +442,8 @@ dev.off()
 # alternative diseases (interesting candidates)
 pdf(
   file.path(res_path, "plots", "figures", "exposure-response_alt.pdf"),
-  width = 20 * 0.2 * length(all_env),
-  height = 10.6 * 0.4 * (length(alt_dis)) 
+  width = 20 * 0.17 * length(all_env),
+  height = 10.6 * 0.3 * (length(alt_dis)) 
 )
 
 plot_expo_resp(
@@ -459,8 +463,8 @@ dev.off()
 # other diseases
 pdf(
   file.path(res_path, "plots", "figures", "exposure-response_other.pdf"),
-  width = 20 * 0.2 * length(all_env),
-  height = 10.6 * 0.4 * (length(other_dis)) 
+  width = 20 * 0.17 * length(all_env),
+  height = 10.6 * 0.3 * (length(other_dis)) 
 )
 
 plot_expo_resp(
@@ -480,8 +484,8 @@ dev.off()
 # unreliable diseases
 pdf(
   file.path(res_path, "plots", "figures", "exposure-response_unreliable.pdf"),
-  width = 20 * 0.2 * length(all_env),
-  height = 10.6 * 0.4 * (length(unre_dis)) 
+  width = 20 * 0.17 * length(all_env),
+  height = 10.6 * 0.3 * (length(unre_dis)) 
 )
 
 plot_expo_resp(
@@ -840,7 +844,7 @@ gtab <-
     .fn=md
   ) |> 
   tab_footnote(
-    footnote = "*: 95% credibility interval excluding 1"
+    footnote = "*: 95% credible interval excluding 1"
   )
 
 
@@ -912,7 +916,7 @@ gtab <-
     .fn=md
   ) |> 
   tab_footnote(
-    footnote = "*: 95% credibility interval excluding 1"
+    footnote = "*: 95% credible interval excluding 1"
   )
 
 
@@ -1006,7 +1010,7 @@ gtab <-
     .fn = md
   ) |> 
   tab_footnote(
-    footnote = "*: 95% credibility interval excluding 1"
+    footnote = "*: 95% credible interval excluding 1"
   )
 
 
@@ -1094,7 +1098,7 @@ gtab <-
     .fn = md
   ) |> 
   tab_footnote(
-    footnote = "*: 95% credibility interval excluding 1"
+    footnote = "*: 95% credible interval excluding 1"
   )
 
 
@@ -1229,7 +1233,7 @@ gtab <-
     .fn = md
   ) |> 
   tab_footnote(
-    footnote = "*: 95% credibility interval excluding 1"
+    footnote = "*: 95% credible interval excluding 1"
   )
 
 
@@ -1362,7 +1366,7 @@ gtab <-
     .fn = md
   ) |> 
   tab_footnote(
-    footnote = "*: 95% credibility interval excluding 1"
+    footnote = "*: 95% credible interval excluding 1"
   )
 
 
@@ -1430,7 +1434,7 @@ gtab <-
     .fn = md
   ) |> 
   tab_footnote(
-    footnote = "*: 95% credibility interval excluding 1"
+    footnote = "*: 95% credible interval excluding 1"
   )
 
 
@@ -1756,7 +1760,7 @@ gtab <-
     .fn=md
   ) |> 
   tab_footnote(
-    footnote = "*: 95% credibility interval excluding 0"
+    footnote = "*: 95% credible interval excluding 0"
   )
 
 
@@ -1803,7 +1807,7 @@ gtab <-
     .fn=md
   ) |> 
   tab_footnote(
-    footnote = "*: 95% credibility interval excluding 0"
+    footnote = "*: 95% credible interval excluding 0"
   )
 
 
@@ -1866,7 +1870,7 @@ gtab <-
     .fn=md
   ) |> 
   tab_footnote(
-    footnote = "*: 95% credibility interval excluding 0"
+    footnote = "*: 95% credible interval excluding 0"
   )
 
 
@@ -1913,7 +1917,7 @@ gtab <-
     .fn=md
   ) |> 
   tab_footnote(
-    footnote = "*: 95% credibility interval excluding 0"
+    footnote = "*: 95% credible interval excluding 0"
   )
 
 
@@ -2429,7 +2433,7 @@ df_env$p_trend <-
 pdf(
   file.path(res_path, "plots", "figures", "environmental-trends.pdf"),
   width = 20 * 0.6,
-  height = 10.6 * 0.22 * length(all_env)
+  height = 10.6 * 0.2 * length(all_env)
 )
   
 df_env |> 
@@ -2681,7 +2685,7 @@ gtab <-
     .fn=md
   ) |> 
   tab_footnote(
-    footnote = "*: 95% credibility interval excluding 0"
+    footnote = "*: 95% credible interval excluding 0"
   )
 
 gtab
@@ -2770,7 +2774,7 @@ df_dis$p_trend <-
 pdf(
   file.path(res_path, "plots", "figures", "disease-trends_main.pdf"),
   width = 20 * 0.6,
-  height = 10.6 * 0.25 * length(main_dis)
+  height = 10.6 * 0.22 * length(main_dis)
 )
 
 df_dis |> 
@@ -2802,7 +2806,7 @@ dev.off()
 pdf(
   file.path(res_path, "plots", "figures", "disease-trends_alt.pdf"),
   width = 20 * 0.6,
-  height = 10.6 * 0.25 * length(alt_dis)
+  height = 10.6 * 0.22 * length(alt_dis)
 )
 
 df_dis |> 
@@ -2834,7 +2838,7 @@ dev.off()
 pdf(
   file.path(res_path, "plots", "figures", "disease-trends_other.pdf"),
   width = 20 * 0.6,
-  height = 10.6 * 0.25 * length(other_dis)
+  height = 10.6 * 0.22 * length(other_dis)
 )
 
 df_dis |> 
@@ -2866,7 +2870,7 @@ dev.off()
 pdf(
   file.path(res_path, "plots", "figures", "disease-trends_unreliable.pdf"),
   width = 20 * 0.6,
-  height = 10.6 * 0.25 * length(unre_dis)
+  height = 10.6 * 0.22 * length(unre_dis)
 )
 
 df_dis |> 
@@ -3115,7 +3119,7 @@ gtab <-
     .fn=md
   ) |> 
   tab_footnote(
-    footnote = "*: 95% credibility interval excluding 0"
+    footnote = "*: 95% credible interval excluding 0"
   )
 
 gtab
@@ -3155,7 +3159,7 @@ gtab <-
     .fn=md
   ) |> 
   tab_footnote(
-    footnote = "*: 95% credibility interval excluding 0"
+    footnote = "*: 95% credible interval excluding 0"
   )
 
 gtab
